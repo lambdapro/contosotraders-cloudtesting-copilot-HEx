@@ -29,6 +29,7 @@ partialReports:
     to:
       - mudassars@lambdatest.com
       - mohitj@lambdatest.com
+      - anubhas@lambdatest.com
 pre:
   - npm install
   - npx playwright install
