@@ -18,9 +18,8 @@ test.describe('msg Validation', () => {
   })
 
 test.describe('msg Validation', () => {
-  test('verify message on site', async ({ page }) => {
-    await page.getByText("Thurday sales is live !")
-    await expect(page).toBeTruthy();
-  }
-
+test('verify message on site', async ({ page }) => {
+  await page.getByText("Wednessday Offers")
+  await expect(page).toBeTruthy();
+})
 });
