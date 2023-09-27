@@ -1,6 +1,6 @@
 version: "0.1"
-user: gagandeepb
-key: wzgRUvmhiGodczTuOWhY0IkITni78467mDrYTFzbFwAMlMqaO7
+user: mudassars
+key: 2aP8PUmPrmpcH5WSFD1dteD5PhmhPCh61SNJDYAgF7XCEx33tH
 matrix: {browser: ['MicrosoftEdge:latest:Windows10@lambdatest', 'chrome:108:Windows10@lambdatest', 'pw-firefox:latest@lambdatest'], methods: [tests/sample.spec.ts, tests/pageTitle.spec.ts, tests/searchbox.spec.ts, verifyMsg.spec.ts], os: [win, linux]}
 testSuites: [npx playwright test --project=$browser $methods]
 pre: [npm install, npx playwright install]
@@ -15,14 +15,25 @@ postDirectives:
     workingDirectory: ""
 runson: ${matrix.os}
 tunnelNames:
-    - rXtisedNrXGQKuMw
+    - DqYeRKslQVlLSnGq
 cacheDirectories:
     - node_modules
 cacheKey: '{{ checksum "package-lock.json" }}'
 retryOnFailure: true
 maxRetries: 1
-jobID: c120ca60-c004-4d50-a07c-5c68cdbfbb5d
+jobID: 13b737a3-0ed9-45bc-b497-fd98f1d608e5
+mergeArtifacts: true
 codeDirectory: ContosoTraders.Ui.Website
+report: true
+partialReports:
+    type: html
+    location: playwright-report
+    frameworkName: playwright
+    email:
+        to:
+            - mudassars@lambdatest.com
+            - mohitj@lambdatest.com
+            - anubhas@lambdatest.com
 framework:
     name: ""
     flags: []
@@ -37,6 +48,7 @@ framework:
     userdefinediscovery: false
     toscaArgs: null
     version: ""
+    downloadURL: ""
 cypress: false
 betaFeature:
     setPartiallyCompletedAsCompleted: false
@@ -45,4 +57,8 @@ combineTasksInMatrixMode: false
 captureScreenRecordingForScenarios: false
 maxRetriesPreSteps: 0
 triggerMode: false
-collectLocalGitData: false
+sourcePayload:
+    verifySSL: true
+collectLocalGitData: true
+dynamicAllocation: false
+appium: false
