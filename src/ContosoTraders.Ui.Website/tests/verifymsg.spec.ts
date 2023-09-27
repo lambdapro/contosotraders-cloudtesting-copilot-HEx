@@ -20,4 +20,9 @@ test.describe('msg Validation', () => {
     await page.getByText("Ganesh Chaturthi Offers")
     await expect(page).toBeTruthy();
   })
+  test('verify message on site', async ({ page }) => {
+    await page.getByText("Wednessday Offers")
+    await expect(page).toBeTruthy();
+  })
+
 });
