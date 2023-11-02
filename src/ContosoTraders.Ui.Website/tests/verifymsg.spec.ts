@@ -18,7 +18,7 @@ test.describe('msg Validation', () => {
   })
 
   test('verify message on site', async ({ page }) => {
-    await page.getByText("Australia Offers")
+    await page.getByText("Munich Offers")
     await expect(page).toBeTruthy();
   })
 

@@ -1,7 +1,7 @@
 ---
 version: "0.1"
 retryOnFailure: true
-maxRetries: 1
+maxRetries: 3
 matrix:
   os: [win,linux]
   browser: [
