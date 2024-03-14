@@ -11,20 +11,10 @@ test.beforeEach(async ({ page }) => {
 //     await expect(page).toBeTruthy();
 //   })
 
-test.describe('msg Validation', () => {
-  test('verify message on site', async ({ page }) => {
-    await page.getByText("Sales for Weekend")
-    await expect(page).toBeTruthy();
-  })
 
   test('verify message on site', async ({ page }) => {
-    await page.getByText("Munich Offers")
+    await page.getByText("14 March Offers")
     await expect(page).toBeTruthy();
-    await page.click('text=Munich Offers');
-  })
-  test('verify message on site', async ({ page }) => {
-    await page.getByText("Memorial Sale Week is Live !")
-    await expect(page).toBeTruthy();
-  })
+  })  
 
 });
