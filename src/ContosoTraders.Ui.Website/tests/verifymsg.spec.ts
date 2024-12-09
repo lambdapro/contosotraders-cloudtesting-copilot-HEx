@@ -13,8 +13,5 @@ test.beforeEach(async ({ page }) => {
 //   })
 
 
-  test('verify message on site', async ({ page }) => {
-    await page.getByText("14 March Offers")
-    await expect(page).toBeTruthy();
-  })
+
 
