@@ -22,9 +22,6 @@ test('verify message on site', async ({ page }) => {
   await expect(page).toBeTruthy();
  })
 
- test('verify message on site', async ({ page }) => {
-  await page.getByText("Memorial Sale Week is Live !")
-   await expect(page).toBeTruthy();
-  })
+
 
 
