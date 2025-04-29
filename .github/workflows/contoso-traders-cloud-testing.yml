@@ -35,6 +35,7 @@ jobs:
               --data '{
                 "test_run_id" : "01JT11BRJ1EWC42SND2XWCJYWQ",
                 "concurrency" : 4,
+                "tunnel": "mudassar"
               }')
             echo "Response: $response"
             job_id=$(echo $response | jq -r '.job_id')
