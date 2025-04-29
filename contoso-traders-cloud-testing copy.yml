@@ -27,16 +27,6 @@ jobs:
               cd src/ContosoTraders.Ui.Website
               npm install
               npm run start &
-              echo "Triggering sanity tests on LambdaTest"
-              response=$(curl --location 'https://test-manager-api.lambdatest.com/api/atm/v1/hyperexecute' \
-              --header 'accept: application/json' \
-              --header 'Content-Type: application/json' \
-              --header 'Authorization:  Basic bXVkYXNzYXJzOk04QVFyR1F2Z2NwMFI1VE9pTm15allNQ29ETEt6cVpRMTBEMllHb0tPY2thclVyYnFK' \
-              --data '{
-                "test_run_id" : "01JT11BRJ1EWC42SND2XWCJYWQ",
-                "concurrency" : 4,
-              }')
-            echo "Response: $response"
-            job_id=$(echo $response | jq -r '.job_id')
-            echo "Job ID: $job_id"
-            echo "::set-output name=job_id::$job_id"
+              curl https://downloads.lambdatest.com/hyperexecute/linux/hyperexecute -o hyperexecute
+              chmod u+x hyperexecute
+            ./hyperexecute --user mudassars --key M8AQrGQvgcp0R5TOiNmyjYMCoDLKzqZQ10D2YGoKOckarUrbqJ  --config hyperexecute-matrix.yaml
