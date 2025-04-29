@@ -33,7 +33,7 @@ jobs:
           response=$(curl --location 'https://test-manager-api.lambdatest.com/api/atm/v1/hyperexecute' \
             --header 'accept: application/json' \
             --header 'Content-Type: application/json' \
-            --header 'Authorization: Basic <Base64Auth>' \
+            --header 'Authorization: Basic bXVkYXNzYXJzOk04QVFyR1F2Z2NwMFI1VE9pTm15allNQ29ETEt6cVpRMTBEMllHb0tPY2thclVyYnFK' \
             --data '{
                 "test_run_id" : "01JT11BRJ1EWC42SND2XWCJYWQ",
                 "concurrency" : 4,
@@ -51,7 +51,7 @@ jobs:
           sleep 240  # Wait before checking the status
           response=$(curl --location "https://api.hyperexecute.cloud/v2.0/job/$job_id" \
             --header "accept: application/json" \
-            --header "Authorization: Basic <Base64Auth>")
+            --header "Authorization: Basic bXVkYXNzYXJzOk04QVFyR1F2Z2NwMFI1VE9pTm15allNQ29ETEt6cVpRMTBEMllHb0tPY2thclVyYnFK")
             
           echo "Response: $response"
           status=$(echo $response | jq -r '.data.status')
