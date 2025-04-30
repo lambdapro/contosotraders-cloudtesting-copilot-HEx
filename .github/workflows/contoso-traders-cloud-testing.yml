@@ -35,7 +35,7 @@ jobs:
             --header 'Content-Type: application/json' \
             --header 'Authorization: Basic bXVkYXNzYXJzOk04QVFyR1F2Z2NwMFI1VE9pTm15allNQ29ETEt6cVpRMTBEMllHb0tPY2thclVyYnFK' \
             --data '{
-                "test_run_id" : "01JT11BRJ1EWC42SND2XWCJYWQ",
+                "test_run_id" : "01JT23JXXZ3RRM020YZ8G3RQYQ",
                 "concurrency" : 4,
                 "tunnel": "mudassar"
             }')
