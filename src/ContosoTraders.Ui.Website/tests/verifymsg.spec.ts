@@ -14,13 +14,14 @@ test.beforeEach(async ({ page }) => {
 
 
 test('verify message on site', async ({ page }) => {
- await page.getByText("Memorial Sale Week is Live !")
+ await page.getByText("sei ffers")
  await expect(page).toBeTruthy();})
 
-test('verify message on site', async ({ page }) => {
- await page.getByText("Memorial Sale Week is Live !")
-  await expect(page).toBeTruthy();
- })
+ test('verify message on site', async ({ page }) => {
+  await page.getByText("sei ffers")
+  await expect(page).toBeTruthy();})
+
+
 
 
 

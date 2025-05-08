@@ -3,6 +3,7 @@
  * Import `test` object from this file in the tests.
  */
 
+import { Accessibility } from "@mui/icons-material";
 import * as base from "@playwright/test";
 import path from "path";
 import { chromium } from "playwright";
@@ -20,6 +21,7 @@ const capabilities = {
     network: true,
     video: true,
     console: true,
+    accessibility:true,
     geoLocation: "", // country code can be fetched from https://www.lambdatest.com/capabilities-generator/
   },
      
