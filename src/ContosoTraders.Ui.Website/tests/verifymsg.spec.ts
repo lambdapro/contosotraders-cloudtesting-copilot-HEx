@@ -14,12 +14,8 @@ test.beforeEach(async ({ page }) => {
 
 
 test('verify message on site', async ({ page }) => {
- await page.getByText("sei ffers")
+ await page.getByText("Dehli NCR Offers")
  await expect(page).toBeTruthy();})
-
- test('verify message on site', async ({ page }) => {
-  await page.getByText("sei ffers")
-  await expect(page).toBeTruthy();})
 
 
 
