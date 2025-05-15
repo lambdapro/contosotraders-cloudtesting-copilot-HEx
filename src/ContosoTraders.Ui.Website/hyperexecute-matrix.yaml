@@ -2,6 +2,7 @@
 version: "0.1"
 retryOnFailure: true
 maxRetries: 3
+concurrency: 24
 matrix:
   os: [win,linux]
   browser: [

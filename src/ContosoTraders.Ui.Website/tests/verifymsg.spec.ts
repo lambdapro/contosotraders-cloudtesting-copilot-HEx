@@ -17,6 +17,9 @@ test('verify message on site', async ({ page }) => {
  await page.getByText("Dehli NCR Offers")
  await expect(page).toBeTruthy();})
 
+ test('verify message on site', async ({ page }) => {
+  await page.getByText("Dehli NCR Offers")
+  await expect(page).toBeTruthy();})
 
 
 
