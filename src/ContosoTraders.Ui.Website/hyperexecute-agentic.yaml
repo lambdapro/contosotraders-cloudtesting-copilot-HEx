@@ -1,0 +1,49 @@
+        version: 0.1
+        globalTimeout: 150
+        testSuiteTimeout: 90
+        testSuiteStep: 90
+        runson: ${matrix.os}
+        retryOnFailure: true
+        maxRetries: 1
+        autosplit: false
+        concurrency: 3
+        tunnel: true
+
+                matrix:
+          browser:
+            - MicrosoftEdge:latest:Windows10@lambdatest
+- chrome:108:Windows10@lambdatest
+- pw-firefox:latest@lambdatest
+
+        pre:
+          - npm ci
+          - npx playwright install --with-deps chromium firefox
+          - npm start &
+          - sleep 20
+
+        cacheDirectories:
+          - node_modules
+        cacheKey: '{% checksum "package-lock.json" %}'
+
+        env:
+          LT_USERNAME: ${LT_USERNAME}
+          LT_ACCESS_KEY: ${LT_ACCESS_KEY}
+
+        testDiscovery:
+  type: raw
+  mode: static
+  command: echo "tests/verifymsg.spec.ts"
+testRunnerCommand: npx playwright test tests/verifymsg.spec.ts --project="$browser" --reporter=junit,html
+
+        mergeArtifacts: true
+        uploadArtefacts:
+          - name: PlaywrightReports
+            path:
+              - playwright-report/
+              - test-results/
+
+        report: true
+        partialReports:
+          type: json
+          location: playwright-report/
+          frameworkName: playwright
