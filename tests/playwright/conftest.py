@@ -136,9 +136,13 @@ def page(request):
     he_local_browser = os.environ.get("HE_LOCAL_BROWSER", "false").lower() == "true"
     local_mode = he_local_browser or not lt_username or not lt_access_key
 
-    # Tunnel support (cloud-CDP mode only): HE sets HYPEREXECUTE_TUNNEL_NAME when tunnel:true.
+    # Tunnel support (cloud-CDP mode only):
+    #   • HE sets HYPEREXECUTE_TUNNEL_NAME for a named tunnel, OR
+    #   • a global HyperExecute tunnel (tunnelOpts.global: true) needs only
+    #     tunnel:true with no name — HE_TUNNEL=true signals that case.
     tunnel_name = os.environ.get("HYPEREXECUTE_TUNNEL_NAME", "")
-    use_tunnel = bool(tunnel_name)
+    he_tunnel_global = os.environ.get("HE_TUNNEL", "false").lower() == "true"
+    use_tunnel = bool(tunnel_name) or he_tunnel_global
 
     platform = _PLATFORM_MAP.get(browser_key, "Windows 10")
     lt_options: dict = {
