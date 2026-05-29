@@ -1,11 +1,11 @@
 Title: Contoso Traders - Memorial Day Sale + Core Feature Validation
+Version: 2
 
 As a shopper visiting the Contoso Traders e-commerce application
 I want to see the Memorial Day Sale promotion and use all key features
 So that I can discover deals and make purchases with confidence
 
 Acceptance Criteria:
-
 AC-001: The application top banner should display a Memorial Day Sale banner.
 AC-002: The home page hero section should display featured products or a promotional banner.
 AC-003: The site header should display the Contoso Traders logo and brand name.
