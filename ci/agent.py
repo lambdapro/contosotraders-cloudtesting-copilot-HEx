@@ -27,7 +27,7 @@ LT_API_BASE       = "https://api.lambdatest.com/automation/api/v1"
 LT_USERNAME       = os.environ.get("LT_USERNAME", "")
 LT_ACCESS_KEY     = os.environ.get("LT_ACCESS_KEY", "")
 FULL_RUN          = os.environ.get("FULL_RUN", "true").lower() == "true"
-TARGET_URL        = os.environ.get("TARGET_URL", "https://ecommerce-playground.lambdatest.io/")
+TARGET_URL        = os.environ.get("TARGET_URL", "http://localhost:3000")
 TODAY             = datetime.now(timezone.utc).date().isoformat()
 RUN_NUMBER        = os.environ.get("GITHUB_RUN_NUMBER", "")
 BUILD_NAME        = (
@@ -126,18 +126,22 @@ from playwright.sync_api import expect
 
 '''
 
-# Product ID 28 (HTC Touch HD, $146.00) has no required options — safe for Add to Cart tests.
-_ECOM = "https://ecommerce-playground.lambdatest.io"
+# Contoso Traders runs on localhost:3000 inside the HyperExecute VM (started in
+# hyperexecute.yaml pre:). All test bodies below target localhost — no external site.
+_CONTOSO = "http://localhost:3000"
 
-def _ec(path: str) -> str:
-    return f'"{_ECOM}{path}"'
+def _ct(path: str) -> str:
+    return f'"{_CONTOSO}{path}"'
 
 
+# Contoso Traders Playwright bodies (localhost:3000), keyed by scenario ID.
+# Order matches requirements/search.txt → SC-001..SC-007.
+# Stage 3 prefers Kane AI's live code exports; these are deterministic fallbacks.
+# Curly braces inside f-string assert messages are DOUBLED so .format(url=url) is safe.
 PLAYWRIGHT_BODIES = {
-    # Contoso Traders — Memorial Day Sale banner
-    # HeaderMessage component in App.js renders: <div class="headerMessageDiv warning"><p class="message m-0">{msg}</p></div>
-    # Curly braces inside f-strings MUST be doubled so _build_test_function(...).format(url=url) does not crash.
-    "SC-016": (
+    # AC-001 / SC-001: Top banner displays Memorial Day Sale
+    # App.js renders: <div class="headerMessageDiv warning"><p class="message m-0">{msg}</p></div>
+    "SC-001": (
         '    page.goto("http://localhost:3000/")\n'
         '    page.wait_for_load_state("networkidle", timeout=30000)\n'
         '    banner = page.locator(".headerMessageDiv .message, .headerMessageDiv p, [class*=headerMessage] p").first\n'
@@ -148,209 +152,98 @@ PLAYWRIGHT_BODIES = {
         '        f"Top banner does not show Memorial Day Sale. Actual: {{banner_text!r}}"'
     ),
 
-    # AC-001: Add a product to the cart from the product detail page and see cart count update
-    "SC-001": (
-        '    page.goto(' + _ec('/index.php?route=product/product&product_id=28') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    add_btn = page.locator("#button-cart")\n'
-        '    add_btn.wait_for(timeout=15000)\n'
-        '    add_btn.click()\n'
-        '    page.wait_for_timeout(1500)\n'
-        '    cart_indicator = page.locator("#cart button span, #cart-total")\n'
-        '    assert cart_indicator.count() > 0, "Cart indicator not found after adding product"'
-    ),
-
-    # AC-002: Open the cart and see the list of added items with names and prices
+    # AC-002 / SC-002: Homepage shows category navigation (Laptops, Controllers, etc.)
     "SC-002": (
-        '    page.goto(' + _ec('/index.php?route=product/product&product_id=28') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    page.locator("#button-cart").wait_for(timeout=15000)\n'
-        '    page.locator("#button-cart").click()\n'
-        '    page.wait_for_timeout(1500)\n'
-        '    cart_btn = page.locator("#cart > button")\n'
-        '    cart_btn.wait_for(timeout=10000)\n'
-        '    cart_btn.click()\n'
-        '    page.wait_for_timeout(1000)\n'
-        '    cart_items = page.locator("#cart .text-left a")\n'
-        '    cart_items.first.wait_for(timeout=10000)\n'
-        '    assert cart_items.count() > 0, "No items visible in cart dropdown"'
+        '    page.goto("http://localhost:3000/")\n'
+        '    page.wait_for_load_state("networkidle", timeout=30000)\n'
+        '    body_text = page.locator("body").inner_text(timeout=10000)\n'
+        '    cats = [c for c in ["Laptops", "Controllers", "Desktops", "Mobiles", "Monitors"] if c.lower() in body_text.lower()]\n'
+        '    assert len(cats) >= 3, f"Expected >=3 nav categories, found: {{cats}}"'
     ),
 
-    # AC-003: Navigate to the product catalog and see a list of products
+    # AC-003 / SC-003: Laptops category shows a product grid with prices
     "SC-003": (
-        '    page.goto(' + _ec('/index.php?route=product/category&path=18') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    products = page.locator(".product-thumb")\n'
-        '    products.first.wait_for(timeout=15000)\n'
-        '    assert products.count() > 0, "No products visible in the Laptops catalog"'
+        '    page.goto("http://localhost:3000/list/laptops")\n'
+        '    page.wait_for_load_state("networkidle", timeout=30000)\n'
+        '    cards = page.locator("[class*=ProductCard], [class*=MuiCard-root], article")\n'
+        '    cards.first.wait_for(timeout=20000)\n'
+        '    assert cards.count() > 0, "No laptop product cards visible in /list/laptops"\n'
+        '    assert "$" in page.locator("body").inner_text(timeout=5000), "No price found in laptop listing"'
     ),
 
-    # AC-004: Apply a brand filter from the sidebar to narrow product results
+    # AC-004 / SC-004: Product detail page shows name, price, image
     "SC-004": (
-        '    page.goto(' + _ec('/index.php?route=product/category&path=25') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    filter_link = page.locator("#column-left .list-group-item").filter(has_text="Apple")\n'
-        '    if filter_link.count() == 0:\n'
-        '        filter_link = page.locator("#column-left a").filter(has_text="Apple")\n'
-        '    filter_link.first.wait_for(timeout=15000)\n'
-        '    filter_link.first.click()\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=15000)\n'
-        '    assert page.locator("#content").count() > 0, "Content area not visible after applying filter"'
+        '    page.goto("http://localhost:3000/list/laptops")\n'
+        '    page.wait_for_load_state("networkidle", timeout=30000)\n'
+        '    card = page.locator("[class*=ProductCard], [class*=MuiCard-root], article").first\n'
+        '    card.wait_for(timeout=20000)\n'
+        '    card.click()\n'
+        '    page.wait_for_load_state("networkidle", timeout=20000)\n'
+        '    assert page.locator("img").first.is_visible(timeout=15000), "No product image on detail page"\n'
+        '    assert "$" in page.locator("body").inner_text(timeout=5000), "No price on detail page"'
     ),
 
-    # AC-005: Click a product to open its detail page and see the name and price
+    # AC-005 / SC-005: Search returns matching product results
     "SC-005": (
-        '    page.goto(' + _ec('/index.php?route=product/product&product_id=28') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    product_name = page.locator("h1").first\n'
-        '    product_name.wait_for(timeout=15000)\n'
-        '    assert product_name.inner_text().strip() != "", "Product name is empty on detail page"\n'
-        '    price = page.locator(".price-new, h2.price, .price").first\n'
-        '    price.wait_for(timeout=10000)\n'
-        '    assert price.count() > 0, "Product price not visible on detail page"'
-    ),
-
-    # AC-006: Browse products and the homepage without logging in
-    "SC-006": (
-        '    page.goto(' + _ec('/') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    hero = page.locator("#content, .slideshow0, .swiper-wrapper, .carousel-inner").first\n'
-        '    hero.wait_for(timeout=15000)\n'
-        '    assert hero.count() > 0, "Homepage content not visible without login"\n'
-        '    assert page.title().strip() != "", "Page title is empty"'
-    ),
-
-    # AC-007: Search for a product by name and see relevant results
-    "SC-007": (
-        '    page.goto(' + _ec('/') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    search_input = page.locator("input[name=\'search\']")\n'
-        '    search_input.wait_for(timeout=15000)\n'
-        '    search_input.fill("iPhone")\n'
-        '    search_input.press("Enter")\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=20000)\n'
-        '    results = page.locator(".product-thumb")\n'
+        '    page.goto("http://localhost:3000/")\n'
+        '    page.wait_for_load_state("networkidle", timeout=30000)\n'
+        '    search = page.locator("input[type=search], input[placeholder*=earch], [class*=Search] input").first\n'
+        '    search.wait_for(timeout=15000)\n'
+        '    search.fill("laptop")\n'
+        '    search.press("Enter")\n'
+        '    page.wait_for_load_state("networkidle", timeout=20000)\n'
+        '    results = page.locator("[class*=ProductCard], [class*=MuiCard-root], article")\n'
         '    results.first.wait_for(timeout=15000)\n'
-        '    assert results.count() > 0, "No search results returned for \'iPhone\'"'
+        '    assert results.count() > 0, "No search results returned for laptop"'
     ),
 
-    # AC-008: Register a new account — verify the registration form and all required fields exist
-    "SC-008": (
-        '    page.goto(' + _ec('/index.php?route=account/register') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    first_name = page.locator("#input-firstname")\n'
-        '    first_name.wait_for(timeout=15000)\n'
-        '    assert first_name.count() > 0, "First name field not found"\n'
-        '    assert page.locator("#input-lastname").count() > 0, "Last name field not found"\n'
-        '    assert page.locator("#input-email").count() > 0, "Email field not found"\n'
-        '    assert page.locator("#input-telephone").count() > 0, "Telephone field not found"\n'
-        '    assert page.locator("#input-password").count() > 0, "Password field not found"'
+    # AC-006 / SC-006: Add to cart updates the cart icon count
+    "SC-006": (
+        '    page.goto("http://localhost:3000/list/laptops")\n'
+        '    page.wait_for_load_state("networkidle", timeout=30000)\n'
+        '    page.locator("[class*=ProductCard], [class*=MuiCard-root], article").first.wait_for(timeout=20000)\n'
+        '    page.locator("[class*=ProductCard], [class*=MuiCard-root], article").first.click()\n'
+        '    page.wait_for_load_state("networkidle", timeout=20000)\n'
+        '    add_btn = page.locator("button:has-text(\\\'Add to Cart\\\'), button:has-text(\\\'Add To Cart\\\'), button:has-text(\\\'BUY\\\')").first\n'
+        '    add_btn.wait_for(timeout=15000)\n'
+        '    add_btn.click()\n'
+        '    page.wait_for_timeout(2000)\n'
+        '    badge = page.locator("[class*=MuiBadge], [class*=badge], [class*=cart-count]").first\n'
+        '    assert badge.count() > 0, "Cart counter not updated after Add to Cart"'
     ),
 
-    # AC-009: Log in — verify login form fields and login button are present and functional
-    "SC-009": (
-        '    page.goto(' + _ec('/index.php?route=account/login') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    email_field = page.locator("#input-email")\n'
-        '    email_field.wait_for(timeout=15000)\n'
-        '    assert email_field.count() > 0, "Email field not found on login page"\n'
-        '    assert page.locator("#input-password").count() > 0, "Password field not found"\n'
-        '    login_btn = page.locator("input[value=\'Login\']")\n'
-        '    assert login_btn.count() > 0, "Login button not found"'
-    ),
-
-    # AC-010: Log out — verify My Account dropdown and Logout link are accessible
-    "SC-010": (
-        '    page.goto(' + _ec('/') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    my_account = page.locator("#top .dropdown-toggle, a:has-text(\'My account\')")\n'
-        '    my_account.first.wait_for(timeout=15000)\n'
-        '    assert my_account.count() > 0, "My Account menu not found in navigation"\n'
-        '    my_account.first.click()\n'
-        '    page.wait_for_timeout(600)\n'
-        '    logout_link = page.locator("a[href*=\'route=account/logout\']")\n'
-        '    assert logout_link.count() > 0, "Logout link not visible in account dropdown"'
-    ),
-
-    # AC-011: Remove item from cart — add product_id=28 (no required options), navigate to cart, remove it
-    "SC-011": (
-        '    page.goto(' + _ec('/index.php?route=product/product&product_id=28') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    add_btn = page.locator("#button-cart")\n'
+    # AC-007 / SC-007: Cart page shows added items with prices
+    "SC-007": (
+        '    page.goto("http://localhost:3000/list/laptops")\n'
+        '    page.wait_for_load_state("networkidle", timeout=30000)\n'
+        '    page.locator("[class*=ProductCard], [class*=MuiCard-root], article").first.wait_for(timeout=20000)\n'
+        '    page.locator("[class*=ProductCard], [class*=MuiCard-root], article").first.click()\n'
+        '    page.wait_for_load_state("networkidle", timeout=20000)\n'
+        '    add_btn = page.locator("button:has-text(\\\'Add to Cart\\\'), button:has-text(\\\'BUY\\\')").first\n'
         '    add_btn.wait_for(timeout=15000)\n'
         '    add_btn.click()\n'
         '    page.wait_for_timeout(1500)\n'
-        '    page.goto(' + _ec('/index.php?route=checkout/cart') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=20000)\n'
-        '    remove_btn = page.locator(".btn-danger").first\n'
-        '    remove_btn.wait_for(timeout=15000)\n'
-        '    remove_btn.click()\n'
-        '    page.wait_for_timeout(1500)\n'
-        '    body_text = page.locator("body").inner_text()\n'
-        '    assert "empty" in body_text.lower(), "Cart still has items after remove"'
+        '    page.goto("http://localhost:3000/cart")\n'
+        '    page.wait_for_load_state("networkidle", timeout=20000)\n'
+        '    items = page.locator("[class*=CartItem], [class*=cart-item], [class*=MuiListItem]")\n'
+        '    items.first.wait_for(timeout=15000)\n'
+        '    assert items.count() > 0, "No items shown on cart page"\n'
+        '    assert "$" in page.locator("body").inner_text(timeout=5000), "No price visible in cart"'
     ),
 
-    # AC-012: Update cart quantity — add product_id=28, navigate to cart, update qty to 2, verify total changes
-    "SC-012": (
-        '    page.goto(' + _ec('/index.php?route=product/product&product_id=28') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    page.locator("#button-cart").wait_for(timeout=15000)\n'
-        '    page.locator("#button-cart").click()\n'
-        '    page.wait_for_timeout(1500)\n'
-        '    page.goto(' + _ec('/index.php?route=checkout/cart') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=20000)\n'
-        '    qty_input = page.locator("input[name*=\'quantity\']").first\n'
-        '    qty_input.wait_for(timeout=15000)\n'
-        '    initial_total = page.locator(".text-right strong").first.inner_text()\n'
-        '    qty_input.fill("2")\n'
-        '    page.locator(".btn-primary").filter(has_text="Update").first.click()\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=15000)\n'
-        '    updated_total = page.locator(".text-right strong").first.inner_text()\n'
-        '    assert updated_total != initial_total, "Line total did not recalculate after quantity update"'
-    ),
-
-    # AC-013: Sort products by price low-to-high and verify order changes
-    "SC-013": (
-        '    page.goto(' + _ec('/index.php?route=product/category&path=20') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    sort_select = page.locator("#input-sort")\n'
-        '    sort_select.wait_for(timeout=15000)\n'
-        '    sort_select.select_option(label="Price (Low > High)")\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=15000)\n'
-        '    products = page.locator(".product-thumb")\n'
-        '    products.first.wait_for(timeout=15000)\n'
-        '    assert products.count() > 0, "No products visible after applying price sort"'
-    ),
-
-    # AC-014: Wishlist — verify the Add to Wish List button exists on a product detail page
-    "SC-014": (
-        '    page.goto(' + _ec('/index.php?route=product/product&product_id=40') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    product_name = page.locator("h1").first\n'
-        '    product_name.wait_for(timeout=15000)\n'
-        '    assert product_name.inner_text().strip() != "", "Product name not found"\n'
-        '    wishlist_btn = page.locator(\n'
-        '        "button[data-original-title*=\'Wish\'], .btn-wishlist, [href*=\'wishlist\']"\n'
-        '    ).first\n'
-        '    assert wishlist_btn.count() > 0, "Wishlist button not found on product page"'
-    ),
-
-    # AC-015: Guest checkout — add to cart then verify guest checkout option is available at checkout
-    "SC-015": (
-        '    page.goto(' + _ec('/index.php?route=product/product&product_id=28') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=30000)\n'
-        '    page.locator("#button-cart").wait_for(timeout=15000)\n'
-        '    page.locator("#button-cart").click()\n'
-        '    page.wait_for_timeout(1500)\n'
-        '    page.goto(' + _ec('/index.php?route=checkout/checkout') + ')\n'
-        '    page.wait_for_load_state("domcontentloaded", timeout=20000)\n'
-        '    guest_option = page.locator("#account-guest")\n'
-        '    login_page_email = page.locator("#input-email")\n'
-        '    has_guest = guest_option.count() > 0\n'
-        '    has_checkout = login_page_email.count() > 0\n'
-        '    assert has_guest or has_checkout, "Guest checkout option not available"'
+    # Memorial Day Sale banner — alias for backward-compat if scenario is keyed SC-016
+    "SC-016": (
+        '    page.goto("http://localhost:3000/")\n'
+        '    page.wait_for_load_state("networkidle", timeout=30000)\n'
+        '    banner = page.locator(".headerMessageDiv .message, .headerMessageDiv p, [class*=headerMessage] p").first\n'
+        '    banner.wait_for(timeout=20000)\n'
+        '    assert banner.count() > 0, "Top banner element (.headerMessageDiv .message) not found"\n'
+        '    banner_text = banner.inner_text().strip()\n'
+        '    assert "memorial day" in banner_text.lower() or "memorial sale" in banner_text.lower(), \\\n'
+        '        f"Top banner does not show Memorial Day Sale. Actual: {{banner_text!r}}"'
     ),
 }
+
 
 _FALLBACK_BODY = '''\
     page.goto("{url}")

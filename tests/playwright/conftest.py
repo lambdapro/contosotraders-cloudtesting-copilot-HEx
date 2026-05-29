@@ -126,12 +126,17 @@ def page(request):
     # Project label: prefer AGENTIC_PROJECT_NAME env var
     project_label = os.environ.get("AGENTIC_PROJECT_NAME", "Agentic STLC")
 
-    # Local mode: run against local browser only when LT credentials are absent.
-    # When credentials ARE present (HyperExecute + tunnel), always use LambdaTest
-    # CDP — the HE tunnel exposes localhost to the LambdaTest cloud browser.
-    local_mode = not lt_username or not lt_access_key
+    # Browser execution mode:
+    #   • HE_LOCAL_BROWSER=true → launch a LOCAL Playwright browser on this HE VM.
+    #     The Contoso app runs on localhost:3000 on the SAME VM (started in the
+    #     hyperexecute.yaml pre: section), so the local browser reaches it directly.
+    #     No tunnel, no LambdaTest cloud CDP. This is the native HyperExecute model.
+    #   • No LT credentials → also local (developer machine / CI without secrets).
+    #   • Otherwise → connect to the LambdaTest cloud grid via CDP wsEndpoint.
+    he_local_browser = os.environ.get("HE_LOCAL_BROWSER", "false").lower() == "true"
+    local_mode = he_local_browser or not lt_username or not lt_access_key
 
-    # Tunnel support: HyperExecute sets HYPEREXECUTE_TUNNEL_NAME when tunnel:true.
+    # Tunnel support (cloud-CDP mode only): HE sets HYPEREXECUTE_TUNNEL_NAME when tunnel:true.
     tunnel_name = os.environ.get("HYPEREXECUTE_TUNNEL_NAME", "")
     use_tunnel = bool(tunnel_name)
 

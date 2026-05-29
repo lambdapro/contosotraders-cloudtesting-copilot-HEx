@@ -1,0 +1,90 @@
+version: 0.1
+
+# ── Contoso Traders — Agentic STLC HyperExecute Config ────────────────────────
+#
+# NATIVE HyperExecute model — NO external tunnel required:
+#   • Each HE VM launches the Contoso Traders app itself in the pre: section
+#     (npm start → localhost:3000 on the same VM).
+#   • Tests run with a LOCAL Playwright browser on the same VM (HE_LOCAL_BROWSER=true),
+#     so the browser reaches localhost:3000 directly — no tunnel, no cloud CDP.
+#   • HyperExecute captures video, logs, and per-task artifacts natively.
+#
+# This replaces the earlier broken approach (TARGET_URL pointed at the dead
+# cloudtesting.contosotraders.com domain, and HE cloud browsers could not reach
+# a localhost app without a tunnel).
+
+globalTimeout: 150
+testSuiteTimeout: 150
+testSuiteStep: 150
+
+runson: linux
+
+autosplit: true
+retryOnFailure: true
+maxRetries: 1
+concurrency: 10
+
+env:
+  LT_USERNAME:        ${LT_USERNAME}
+  LT_ACCESS_KEY:      ${LT_ACCESS_KEY}
+  GITHUB_RUN_NUMBER:  ${GITHUB_RUN_NUMBER}
+  TARGET_URL:         "http://localhost:3000"
+  BROWSERS:           "chrome"
+  # Tells conftest.py to launch a LOCAL browser on the HE VM instead of
+  # connecting to the LambdaTest cloud grid via CDP. No tunnel needed.
+  HE_LOCAL_BROWSER:   "true"
+
+cacheKey: '{{ checksum "requirements.txt" }}'
+cacheDirectories:
+  - .pip_cache
+  - ~/.cache/ms-playwright
+  - src/ContosoTraders.Ui.Website/node_modules
+
+# pre: runs on EACH HE VM before the test runner.
+#  1. Python deps + Playwright browser (local browser for the test)
+#  2. Install the Contoso UI deps and launch it on localhost:3000 (backgrounded,
+#     nohup so it survives past this pre-step), then wait until it answers.
+pre:
+  - mkdir -p reports
+  - pip install --cache-dir .pip_cache -r requirements.txt -q
+  - playwright install chromium
+  # Ensure Node.js is available (runtime is python; install Node 18 via nvm if absent)
+  - node --version || (curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm install 18 && nvm use 18)
+  - cd src/ContosoTraders.Ui.Website && npm install --no-audit --no-fund
+  # Launch the Contoso app on localhost:3000 (backgrounded, survives this step) and wait until it answers
+  - cd src/ContosoTraders.Ui.Website && (BROWSER=none nohup npm start > /tmp/contoso-app.log 2>&1 &) ; echo "app launching..." ; for i in $(seq 1 60); do curl -sf http://localhost:3000 -o /dev/null && echo "App ready on localhost:3000 after $((i*3))s" && break; sleep 3; done ; curl -sf http://localhost:3000 -o /dev/null || (echo "ERROR: app did not start"; tail -40 /tmp/contoso-app.log; exit 1)
+
+runtime:
+  language: python
+  version: "3.11"
+
+# Stage 4 (write_test_selection in agent.py) writes one pytest node ID per line.
+# HyperExecute reads this file and fans each node out to a separate VM.
+testDiscovery:
+  type: raw
+  mode: dynamic
+  command: cat reports/pytest_selection.txt
+
+testRunnerCommand: PYTHONPATH=. pytest "$test" -v --tb=short -s --html=reports/report.html --junitxml=reports/junit.xml
+
+mergeArtifacts: true
+
+uploadArtefacts:
+  - name: ContosoPipelineReports
+    path:
+      - reports/
+
+report: true
+partialReports:
+  type: json
+  location: reports/
+  frameworkName: extent
+
+post:
+  - echo "HyperExecute Contoso Traders tests complete"
+
+jobLabel:
+  - contoso-traders
+  - agentic-stlc
+  - playwright
+  - python

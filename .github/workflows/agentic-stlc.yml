@@ -236,20 +236,9 @@ jobs:
 
       - name: "Install Python deps"
         run: pip install -r requirements.txt --cache-dir ~/.cache/pip -q
-
-      - name: "Install UI npm deps"
-        working-directory: ${{ env.UI_DIR }}
-        run: npm install
-
-      - name: "Start app on localhost:3000"
-        working-directory: ${{ env.UI_DIR }}
-        run: |
-          BROWSER=none npm start &
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:3000 -o /dev/null && echo "App ready" && break
-            sleep 2
-          done
-          curl -sf http://localhost:3000 -o /dev/null || (echo "App not started" && exit 1)
+        # No app start and no tunnel on this runner: agent.py submits the
+        # HyperExecute job, and each HE VM launches the Contoso app itself
+        # (hyperexecute.yaml pre:) then runs the test with a local browser.
 
       - run: mkdir -p reports
 
