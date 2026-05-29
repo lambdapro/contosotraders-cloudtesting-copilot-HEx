@@ -597,6 +597,8 @@ def run_kane_testmd(index: int, description: str, testmd_file: Path) -> dict:
 
     command = [
         KANE_EXE, "testmd", "run", str(testmd_file),
+        "--username", username,
+        "--access-key", access_key,
         "--agent", "--headless",
         "--timeout", "120",
         "--max-steps", "30",

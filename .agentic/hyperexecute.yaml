@@ -4,6 +4,7 @@ testSuiteTimeout: 180
 testSuiteStep: 180
 
 runson: linux
+tunnel: true
 
 autosplit: true
 retryOnFailure: true
@@ -28,7 +29,10 @@ cacheDirectories:
 pre:
   - mkdir -p reports
   - pip install --cache-dir .pip_cache -r requirements.txt
-  - playwright install chromium firefox webkit
+  - cd ../src/ContosoTraders.Ui.Website && npm ci
+  - (cd ../src/ContosoTraders.Ui.Website && npm start &)
+  - npx wait-on http://localhost:3000 --timeout 60000
+  - playwright install chromium --with-deps
 
 runtime:
   language: python
