@@ -95,7 +95,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: requirements/analyzed_requirements.json
-          key: kane-contoso-${{ hashFiles('requirements/*.txt') }}-v3
+          key: kane-contoso-${{ hashFiles('requirements/*.txt') }}-v4
 
       - name: "Install Python deps"
         run: pip install -r requirements.txt --cache-dir ~/.cache/pip -q
@@ -159,6 +159,11 @@ jobs:
           KANE_PARALLEL_WORKERS:   ${{ inputs.kane_workers || '5' }}
           KANE_SUBPROCESS_TIMEOUT: "120"
           GITHUB_RUN_NUMBER:       ${{ github.run_number }}
+          # Kane AI CLI runtime config — point at the LambdaTest Kane AI API host
+          # and enable smart mode so the agent runs on the remote grid correctly.
+          TESTMU_SMART:            "1"
+          TESTMU_HEADLESS:         "false"
+          TESTMU_AI_API_HOST:      "https://kaneai-api.lambdatest.com/v16-server"
         run: |
           python ci/analyze_requirements.py \
             --requirements requirements/search.txt \
