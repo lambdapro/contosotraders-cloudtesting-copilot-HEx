@@ -64,6 +64,148 @@ def _find_code_export_by_session_id(session_id: str) -> str:
     return ""
 
 
+import re as _re
+_UUID_RE = _re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    _re.IGNORECASE,
+)
+# Kane's plain-text links box uses keyword labels before the URL
+_LINK_LABEL_RE = _re.compile(
+    r"(sharelink|testcase|sessionlink|recordinglink|session[-_\s]?url)\s+",
+    _re.IGNORECASE,
+)
+_HTTP_URL_RE = _re.compile(r"https?://\S+")
+
+
+def _parse_kane_output(combined: str) -> dict:
+    """
+    Parse Kane CLI stdout+stderr and return a result dict with all extracted fields:
+      status, summary, one_liner, steps, final_state, duration,
+      test_url, session_id, code_export_dir, share_link, testcase_link
+
+    Handles:
+      - NDJSON event stream (step_end, run_end, code_export, …)
+      - Plain-text links box printed at session end:
+          │  ShareLink    https://share.testmuai.com/...  │
+          │  TestCase     https://test-manager.testmuai.com/...  │
+          │  CodeExport   file:///...  │
+      - Bare text lines without box borders
+    """
+    run_end = None
+    step_summaries: list[str] = []
+    session_id = ""
+    code_export_dir = ""
+    share_link = ""
+    testcase_link = ""
+
+    for raw in combined.splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            continue
+
+        # ── Attempt JSON parse ──────────────────────────────────────────────
+        try:
+            event = json.loads(stripped)
+        except (json.JSONDecodeError, ValueError):
+            event = None
+
+        if event is not None:
+            etype = event.get("type", "")
+            if etype in ("step_end", "stepEnd") and event.get("summary"):
+                step_summaries.append(event["summary"])
+            elif etype in ("run_end", "runEnd"):
+                run_end = event
+                session_id = session_id or (
+                    event.get("session_id")
+                    or event.get("sessionId")
+                    or event.get("data", {}).get("session_id", "")
+                    or ""
+                )
+            elif etype in ("code_export", "codeExport"):
+                raw_path = event.get("path") or event.get("directory") or ""
+                if raw_path:
+                    code_export_dir = code_export_dir or _resolve_code_export_path(raw_path)
+            elif etype in ("share_link", "shareLink"):
+                share_link = share_link or event.get("url", "")
+            elif etype in ("test_case", "testCase"):
+                testcase_link = testcase_link or event.get("url", "")
+
+            if not session_id:
+                session_id = event.get("session_id") or event.get("sessionId") or ""
+
+            raw_export = event.get("code_export_path", "") or event.get("export_path", "")
+            if raw_export and not code_export_dir:
+                code_export_dir = _resolve_code_export_path(
+                    _parse_file_url(raw_export)
+                )
+            continue
+
+        # ── Plain-text line parsing ─────────────────────────────────────────
+        upper = stripped.upper().replace(" ", "").replace("-", "")
+
+        # CodeExport link
+        if "CODEEXPORT" in upper:
+            for token in stripped.split():
+                if token.lower().startswith("file://"):
+                    resolved = _resolve_code_export_path(_parse_file_url(token))
+                    code_export_dir = code_export_dir or resolved
+                    break
+            if not code_export_dir:
+                for token in stripped.split():
+                    if "code-export" in token.lower() or "kaneai/sessions" in token.lower():
+                        resolved = _resolve_code_export_path(token)
+                        code_export_dir = code_export_dir or resolved
+                        break
+
+        # ShareLink / TestCase / session links — Kane prints these as:
+        #   "ShareLink   https://share.testmuai.com/..."
+        #   "│  ShareLink    https://...  │"
+        if "SHARELINK" in upper or "SHARE.TESTMUAI" in upper:
+            m = _HTTP_URL_RE.search(stripped)
+            if m:
+                share_link = share_link or m.group(0).rstrip("│ \t")
+
+        if "TESTCASE" in upper or "TEST-MANAGER.TESTMUAI" in upper or "TESTMANAGER" in upper:
+            m = _HTTP_URL_RE.search(stripped)
+            if m:
+                testcase_link = testcase_link or m.group(0).rstrip("│ \t")
+
+        # SessionLink / recording link
+        if ("SESSIONLINK" in upper or "RECORDINGLINK" in upper) and not share_link:
+            m = _HTTP_URL_RE.search(stripped)
+            if m:
+                share_link = m.group(0).rstrip("│ \t")
+
+        # Session UUID from any line that mentions sessions dir
+        if not session_id and "sessions" in stripped.lower():
+            m = _UUID_RE.search(stripped)
+            if m:
+                session_id = m.group(0)
+
+    # Fallback: derive code-export path from session ID
+    if not code_export_dir and session_id:
+        code_export_dir = _find_code_export_by_session_id(session_id)
+
+    # Derive test_url from run_end or share_link
+    test_url = ""
+    if run_end:
+        test_url = run_end.get("test_url", "") or run_end.get("session_url", "")
+    if not test_url and share_link:
+        test_url = share_link
+    if not test_url and session_id:
+        test_url = f"https://test-manager.lambdatest.com/session/{session_id}"
+
+    return {
+        "run_end": run_end,
+        "step_summaries": step_summaries,
+        "session_id": session_id,
+        "code_export_dir": code_export_dir,
+        "share_link": share_link,
+        "testcase_link": testcase_link,
+        "test_url": test_url,
+    }
+
+
 def _kane_exe():
     """Return the kane-cli executable, resolving .cmd wrapper on Windows."""
     exe = shutil.which("kane-cli")
@@ -339,112 +481,17 @@ def run_kane(index, description):
         "--skip-code-validation",
     ]
     run_start = time.time()
-    completed = subprocess.run(command, capture_output=True, text=True, check=False, encoding="utf-8", errors="replace")
-
+    completed = subprocess.run(command, capture_output=True, text=True, check=False,
+                               encoding="utf-8", errors="replace")
+    duration = round(time.time() - run_start, 1)
     exit_status = EXIT_STATUS.get(completed.returncode, "error")
 
-    run_end = None
-    step_summaries = []
-    session_id = ""
-    code_export_dir = ""
     combined = completed.stdout + "\n" + completed.stderr
-
-    # ── Parse Kane NDJSON + plain-text output ──────────────────────────────
-    # Kane CLI emits two kinds of output on stdout/stderr:
-    #   1. NDJSON events  — one JSON object per line (step_end, run_end, …)
-    #   2. Plain-text lines — the "links box" at session exit, e.g.:
-    #        │  CodeExport   file:///home/runner/.testmuai/kaneai/sessions/UUID/code-export/  │
-    #      or (without box borders):
-    #        CodeExport  file:///home/runner/.testmuai/kaneai/sessions/UUID/code-export/
-    #
-    # Strategy:
-    #   a) Try JSON parse first on every line.
-    #   b) For non-JSON lines, scan for a "file://" token adjacent to "CodeExport".
-    #   c) Also scan non-JSON lines for a bare UUID-shaped path segment that
-    #      looks like a session directory path — this catches cases where Kane
-    #      prints the path without the file:// scheme.
-    # ────────────────────────────────────────────────────────────────────────
-    import re as _re
-    _UUID_RE = _re.compile(
-        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-        _re.IGNORECASE,
-    )
-
-    for raw in combined.splitlines():
-        stripped = raw.strip()
-        if not stripped:
-            continue
-
-        # ── Attempt JSON parse ─────────────────────────────────────────────
-        try:
-            event = json.loads(stripped)
-        except (json.JSONDecodeError, ValueError):
-            event = None
-
-        if event is not None:
-            event_type = event.get("type", "")
-            if event_type in ("step_end", "stepEnd") and event.get("summary"):
-                step_summaries.append(event["summary"])
-            elif event_type in ("run_end", "runEnd"):
-                run_end = event
-                # session_id may be on run_end directly, or nested under data/metadata
-                session_id = (
-                    event.get("session_id")
-                    or event.get("sessionId")
-                    or event.get("data", {}).get("session_id", "")
-                    or ""
-                )
-            # Some Kane versions emit a dedicated code_export event
-            elif event_type in ("code_export", "codeExport"):
-                raw_path = event.get("path") or event.get("directory") or ""
-                if raw_path:
-                    code_export_dir = _resolve_code_export_path(raw_path)
-            # session_id can also appear on non-run_end events (e.g. session_start)
-            if not session_id:
-                session_id = (
-                    event.get("session_id")
-                    or event.get("sessionId")
-                    or ""
-                )
-            continue
-
-        # ── Plain-text line: look for CodeExport + file:// ─────────────────
-        upper = stripped.upper()
-        if "CODEEXPORT" in upper.replace(" ", "").replace("-", ""):
-            # Extract any file:// token on this line
-            for token in stripped.split():
-                if token.lower().startswith("file://"):
-                    path = _parse_file_url(token)
-                    resolved = _resolve_code_export_path(path)
-                    if resolved:
-                        code_export_dir = resolved
-                        break
-            # Also try bare path (no file:// scheme) — e.g. /home/runner/...
-            if not code_export_dir:
-                for token in stripped.split():
-                    if "code-export" in token.lower() or "kaneai/sessions" in token.lower():
-                        resolved = _resolve_code_export_path(token)
-                        if resolved:
-                            code_export_dir = resolved
-                            break
-
-        # ── Extract session UUID from any line that mentions sessions dir ──
-        if not session_id and "sessions" in stripped.lower():
-            m = _UUID_RE.search(stripped)
-            if m:
-                session_id = m.group(0)
-
-    # ── Resolve code-export path ────────────────────────────────────────────
-    # Priority:
-    #   1. Explicit code_export event or CodeExport link already resolved above
-    #   2. Deterministic session-ID lookup (GitHub Actions authoritative path)
-    # We do NOT fall back to timestamp-based scanning because concurrent sessions
-    # running in the ThreadPoolExecutor would produce ambiguous results.
-    if not code_export_dir and session_id:
-        code_export_dir = _find_code_export_by_session_id(session_id)
+    parsed = _parse_kane_output(combined)
+    run_end = parsed["run_end"]
 
     if not run_end:
-        raw_output = (completed.stdout + completed.stderr).strip()
+        raw_output = combined.strip()
         diagnostic = raw_output[:500] if raw_output else "Kane CLI produced no output."
         return {
             "status": exit_status,
@@ -452,22 +499,26 @@ def run_kane(index, description):
             "one_liner": "",
             "steps": [],
             "final_state": {},
-            "duration": None,
-            "test_url": "",
-            "session_id": session_id,
-            "code_export_dir": code_export_dir,
+            "duration": duration,
+            "test_url": parsed["test_url"],
+            "session_id": parsed["session_id"],
+            "code_export_dir": parsed["code_export_dir"],
+            "share_link": parsed["share_link"],
+            "testcase_link": parsed["testcase_link"],
         }
 
     return {
         "status": run_end.get("status", exit_status),
         "summary": run_end.get("summary", ""),
         "one_liner": run_end.get("one_liner", ""),
-        "steps": step_summaries,
+        "steps": parsed["step_summaries"],
         "final_state": run_end.get("final_state", {}),
-        "duration": run_end.get("duration"),
-        "test_url": run_end.get("test_url", ""),
-        "session_id": session_id,
-        "code_export_dir": code_export_dir,
+        "duration": duration,
+        "test_url": parsed["test_url"],
+        "session_id": parsed["session_id"],
+        "code_export_dir": parsed["code_export_dir"],
+        "share_link": parsed["share_link"],
+        "testcase_link": parsed["testcase_link"],
     }
 
 
@@ -528,7 +579,11 @@ def _discover_testmd_files(testmd_dir: str = "kane/testmd") -> list[Path]:
 
 
 def run_kane_testmd(index: int, description: str, testmd_file: Path) -> dict:
-    """Run a single kane-cli testmd run and return a Kane result dict."""
+    """Run a single kane-cli testmd run and return a Kane result dict.
+
+    Uses the same shared _parse_kane_output() as run_kane so TMS links
+    (ShareLink, TestCase), code exports, and session IDs are all captured.
+    """
     username = os.environ.get("LT_USERNAME", "")
     access_key = os.environ.get("LT_ACCESS_KEY", "")
     if not username or not access_key:
@@ -536,7 +591,8 @@ def run_kane_testmd(index: int, description: str, testmd_file: Path) -> dict:
             "status": "skipped",
             "summary": "Skipped Kane TestMD run: LT credentials not available.",
             "one_liner": "", "steps": [], "final_state": {},
-            "duration": None, "test_url": "", "session_id": "", "code_export_dir": "",
+            "duration": None, "test_url": "", "session_id": "",
+            "code_export_dir": "", "share_link": "", "testcase_link": "",
         }
 
     command = [
@@ -545,74 +601,42 @@ def run_kane_testmd(index: int, description: str, testmd_file: Path) -> dict:
         "--timeout", "120",
         "--max-steps", "30",
         "--on-lock-conflict", "wait",
+        "--retry",
     ]
     print(f"  [testmd] AC-{index:03d}: {testmd_file.name}")
     run_start = time.time()
     completed = subprocess.run(command, capture_output=True, text=True, check=False,
                                encoding="utf-8", errors="replace")
     duration = round(time.time() - run_start, 1)
-
     exit_status = EXIT_STATUS.get(completed.returncode, "error")
+
     combined = completed.stdout + "\n" + completed.stderr
-
-    # Parse NDJSON output (same as regular run_kane)
-    run_end = None
-    step_summaries = []
-    session_id = ""
-    code_export_dir = ""
-
-    for line in combined.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-        except Exception:
-            if "CodeExport" in line:
-                for part in line.split():
-                    if part.startswith("file://") or ("sessions" in part and "code" in part.lower()):
-                        raw = _parse_file_url(part)
-                        resolved = _resolve_code_export_path(raw)
-                        if resolved:
-                            code_export_dir = resolved
-            continue
-
-        if event.get("type") == "run_end":
-            run_end = event
-        elif event.get("type") == "step_end":
-            step_summaries.append(event.get("summary", ""))
-        elif event.get("type") == "run_start":
-            session_id = event.get("session_id", "")
-
-        raw_export = event.get("code_export_path", "") or event.get("export_path", "")
-        if raw_export:
-            resolved = _resolve_code_export_path(_parse_file_url(raw_export))
-            if resolved:
-                code_export_dir = resolved
+    parsed = _parse_kane_output(combined)
+    run_end = parsed["run_end"]
 
     if run_end:
-        exit_status = "passed" if run_end.get("passed") else "failed"
-        session_id = session_id or run_end.get("session_id", "")
+        status = "passed" if run_end.get("passed") else "failed"
         summary = run_end.get("summary", run_end.get("one_liner", ""))
         one_liner = run_end.get("one_liner", summary)
+        final_state = run_end.get("final_state", {})
     else:
-        summary = f"TestMD run {exit_status} (exit={completed.returncode})"
+        status = exit_status
+        summary = f"TestMD run {exit_status} (exit={completed.returncode}): {combined[:300]}"
         one_liner = ""
-
-    test_url = ""
-    if session_id:
-        test_url = f"https://test-manager.lambdatest.com/session/{session_id}"
+        final_state = {}
 
     return {
-        "status": exit_status,
+        "status": status,
         "summary": summary,
         "one_liner": one_liner,
-        "steps": step_summaries,
-        "final_state": run_end or {},
+        "steps": parsed["step_summaries"],
+        "final_state": final_state,
         "duration": duration,
-        "test_url": test_url,
-        "session_id": session_id,
-        "code_export_dir": code_export_dir,
+        "test_url": parsed["test_url"],
+        "session_id": parsed["session_id"],
+        "code_export_dir": parsed["code_export_dir"],
+        "share_link": parsed["share_link"],
+        "testcase_link": parsed["testcase_link"],
     }
 
 
@@ -724,7 +748,13 @@ def main():
             "kane_steps": kane.get("steps", []),
             "kane_final_state": kane["final_state"],
             "kane_duration": kane["duration"],
-            "kane_links": [test_url] if test_url else [],
+            "kane_links": [u for u in [
+                kane.get("share_link", ""),
+                kane.get("testcase_link", ""),
+                test_url,
+            ] if u],
+            "kane_share_link": kane.get("share_link", ""),
+            "kane_testcase_link": kane.get("testcase_link", ""),
             "kane_session_id": kane.get("session_id", ""),
             "kane_code_export_dir": kane.get("code_export_dir", ""),
             "last_analyzed": today,
