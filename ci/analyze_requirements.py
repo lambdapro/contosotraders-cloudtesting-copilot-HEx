@@ -387,15 +387,15 @@ _KANE_TASK_OVERRIDES: dict[str, str] = {
 
 
 def _get_kane_task(description: str) -> str:
-    """Return an optimized Kane objective, or the description itself.
+    """Return an optimized Kane objective with the landing URL embedded.
 
-    The base URL is provided to Kane via the --url flag, so objectives are
-    written relative to the landing page (no hardcoded host needed)."""
+    This kane-cli version has no --url flag, so every objective starts by
+    navigating to TARGET_URL explicitly."""
     dl = description.lower()
     for keyword, task in _KANE_TASK_OVERRIDES.items():
         if keyword in dl:
-            return task
-    return description
+            return f"Go to {TARGET_URL} and wait for it to load. {task}"
+    return f"Go to {TARGET_URL} and wait for it to load. {description}"
 
 
 EXIT_STATUS = {0: "passed", 1: "failed", 2: "error", 3: "timeout"}
@@ -429,18 +429,40 @@ def run_kane(index, description):
     except Exception:
         pass
 
-    task = _get_kane_task(description)
+    session_name = f"AC-{index:03d} | {description[:80].strip()}"
 
-    # Native Kane CLI invocation: --url sets the landing page; when a tunnel is
-    # active we MUST also pass --grid remote so Kane runs on the LambdaTest cloud
-    # grid and binds the named tunnel — only then can the cloud browser reach the
-    # localhost app. Without --grid remote the tunnel binding never applies and
-    # the app fails to load.
+    # Kane connects to the LambdaTest cloud grid via the CDP wsEndpoint. The
+    # tunnel (tunnel:true + tunnelName) is set in the LT:Options capabilities so
+    # the cloud browser reaches the app on the runner's localhost via the tunnel.
+    # NOTE: this kane-cli version does NOT support a --url flag — the landing URL
+    # is embedded in the objective text by _get_kane_task() instead.
+    caps = {
+        "browserName": "Chrome",
+        "browserVersion": "latest",
+        "LT:Options": {
+            "platform": "Windows 10",
+            "build": build_name(),
+            "name": session_name,
+            "user": username,
+            "accessKey": access_key,
+            "network": True,
+            "video": True,
+            "console": True,
+            "tunnel": os.environ.get("KANE_TUNNEL", "false").lower() == "true",
+            "tunnelName": os.environ.get("KANE_TUNNEL_NAME", ""),
+            "playwrightClientVersion": playwright_version,
+        },
+    }
+    ws_endpoint = (
+        "wss://cdp.lambdatest.com/playwright?capabilities="
+        + urllib.parse.quote(json.dumps(caps))
+    )
+    task = _get_kane_task(description)
     command = [
         KANE_EXE, "run", task,
-        "--url", TARGET_URL,
         "--username", username,
         "--access-key", access_key,
+        "--ws-endpoint", ws_endpoint,
         "--agent",
         "--headless",
         "--timeout", "120",
@@ -449,9 +471,6 @@ def run_kane(index, description):
         "--code-language", "python",
         "--skip-code-validation",
     ]
-    tunnel_name = os.environ.get("KANE_TUNNEL_NAME", "")
-    if os.environ.get("KANE_TUNNEL", "false").lower() == "true" and tunnel_name:
-        command += ["--grid", "remote", "--tunnel-name", tunnel_name]
     run_start = time.time()
     completed = subprocess.run(command, capture_output=True, text=True, check=False,
                                encoding="utf-8", errors="replace")

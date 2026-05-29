@@ -95,7 +95,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: requirements/analyzed_requirements.json
-          key: kane-contoso-${{ hashFiles('requirements/*.txt') }}-v4
+          key: kane-contoso-${{ hashFiles('requirements/*.txt') }}-v5
 
       - name: "Install Python deps"
         run: pip install -r requirements.txt --cache-dir ~/.cache/pip -q
@@ -103,6 +103,15 @@ jobs:
       - name: "Install Kane CLI"
         if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
         run: npm install -g @testmuai/kane-cli && kane-cli --version
+
+      - name: "Diagnostic — kane-cli run flags"
+        if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
+        continue-on-error: true
+        run: |
+          echo "===== kane-cli run --help ====="
+          kane-cli run --help || true
+          echo "===== kane-cli --help ====="
+          kane-cli --help || true
 
       - name: "Install UI npm deps"
         if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
