@@ -1,0 +1,77 @@
+version: "1.0"
+
+project:
+  name: "contoso-traders-stlc"
+  description: "Agentic STLC for Contoso Traders e-commerce application"
+  repository: "https://github.com/lambdapro/contosotraders-cloudtesting-copilot-HEx"
+  branch: "feature/agentic-stlc-pipeline"
+
+requirements:
+  format: "acceptance_criteria"
+  paths:
+    - "requirements/search.txt"
+  output_path: "requirements/analyzed_requirements.json"
+  encoding: "utf-8"
+
+scenarios:
+  path: "scenarios/scenarios.json"
+  id_prefix: "SC"
+  id_start: 1
+
+framework:
+  type: "playwright"
+  language: "python"
+  test_dir: "tests/playwright"
+  test_file: "tests/playwright/test_powerapps.py"
+
+target:
+  url: "http://localhost:3000"
+  environment: "local"
+
+execution:
+  provider: "hyperexecute"
+  mode: "incremental"
+  concurrency: 10
+  timeout_seconds: 180
+  retries: 1
+  browsers:
+    - chrome
+
+hyperexecute:
+  config_file: "hyperexecute.yaml"
+  cli_path: "./hyperexecute"
+  project: "contoso-traders-stlc"
+  region: "us"
+
+kaneai:
+  enabled: true
+  parallel_workers: 10
+  timeout_seconds: 120
+  use_testmd: false
+  testmd_output_dir: "kane/testmd"
+
+reporting:
+  output_dir: "reports"
+  formats:
+    - json
+    - markdown
+  github_summary: true
+
+quality_gates:
+  min_coverage_pct: 50
+  min_pass_rate: 75
+  max_flaky: 5
+  require_critical_coverage: true
+  max_high_risk_uncovered: 999
+  min_he_pct: 0
+
+skill:
+  product_branch: "feature/agentic-stlc-pipeline"
+  github_repo: "lambdapro/contosotraders-cloudtesting-copilot-HEx"
+  on_demand_workflow: "agentic-stlc.yml"
+  webhook_port: 8765
+  callback_url: ""
+  artifact_download: true
+  pipeline_timeout_s: 1800
+  requirements_file: "requirements/search.txt"
+  auto_rca: true

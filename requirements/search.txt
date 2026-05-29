@@ -1,0 +1,15 @@
+Title: Contoso Traders — Agentic STLC Requirements
+# Target: http://localhost:3000 (React dev server started by pipeline pre-step)
+
+As a user
+I want to use the Contoso Traders application
+So that I can browse products and complete purchases
+
+Acceptance Criteria:
+The application top banner should display a Memorial Day Sale banner
+Navigate to the homepage and see the main navigation with product categories Laptops Controllers Desktops Mobiles and Monitors
+Click Laptops in the navigation and see a grid of laptop products each showing a name and price
+Click on any product in the laptops category and see a detail page with the product name price and image
+Use the search bar to type a product keyword and see matching product results appear
+Add a product to the cart from the product detail page and see the cart icon update with an item count
+Open the cart page and see the list of added items with names prices and quantities

@@ -1,0 +1,394 @@
+﻿name: Agentic STLC - Contoso Traders
+
+on:
+  push:
+    paths:
+      - "requirements/**"
+      - "scenarios/**"
+      - "tests/**"
+      - "ci/**"
+      - "hyperexecute.yaml"
+      - "agentic-stlc.config.yaml"
+      - ".github/workflows/agentic-stlc.yml"
+  workflow_dispatch:
+    inputs:
+      full_run:
+        description: "Run all active scenarios (not just new/updated)"
+        required: false
+        default: "true"
+        type: boolean
+      demo_mode:
+        description: "Use pre-generated Kane results (skip live Kane calls)"
+        required: false
+        default: "false"
+        type: boolean
+      browsers:
+        description: "Browsers for HyperExecute"
+        required: false
+        default: "chrome"
+        type: string
+      kane_workers:
+        description: "Kane parallel workers (1-10)"
+        required: false
+        default: "5"
+        type: string
+
+env:
+  NODE_VERSION: "18"
+  PYTHON_VERSION: "3.11"
+  UI_DIR: "src/ContosoTraders.Ui.Website"
+
+jobs:
+
+  preflight:
+    name: "Pre-flight - Workspace Bootstrap"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run-ts: ${{ steps.meta.outputs.run_ts }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Emit run metadata"
+        id: meta
+        run: |
+          echo "run_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "## Agentic STLC - Contoso Traders" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| App | localhost:3000 (React dev server) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run | ${{ github.run_id }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | ${{ github.ref_name }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  analyze:
+    name: "Stage 1 - KaneAI Functional Verification"
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      requirements-count: ${{ steps.emit.outputs.requirements_count }}
+      kane-passed:        ${{ steps.emit.outputs.kane_passed }}
+      kane-pass-rate:     ${{ steps.emit.outputs.kane_pass_rate }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: "Cache npm"
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-contoso-${{ runner.os }}-${{ env.NODE_VERSION }}
+
+      - name: "Cache pip"
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
+
+      - name: "Cache Kane results"
+        id: kane-cache
+        uses: actions/cache@v4
+        with:
+          path: requirements/analyzed_requirements.json
+          key: kane-contoso-${{ hashFiles('requirements/*.txt') }}-v1
+
+      - name: "Install Python deps"
+        run: pip install -r requirements.txt --cache-dir ~/.cache/pip -q
+
+      - name: "Install Kane CLI"
+        if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
+        run: npm install -g @testmuai/kane-cli && kane-cli --version
+
+      - name: "Install UI npm deps"
+        if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
+        working-directory: ${{ env.UI_DIR }}
+        run: npm install
+
+      - name: "Start app on localhost:3000"
+        if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
+        working-directory: ${{ env.UI_DIR }}
+        run: |
+          BROWSER=none npm start &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000 -o /dev/null && echo "App ready" && break
+            sleep 2
+          done
+          curl -sf http://localhost:3000 -o /dev/null || (echo "App not started" && exit 1)
+
+      - name: "Start LambdaTest tunnel"
+        if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
+        id: tunnel
+        run: |
+          curl -fsSL https://downloads.lambdatest.com/tunnel/v3/linux/64bit/LT_Linux.zip -o lt.zip
+          unzip -q lt.zip && chmod +x LT
+          TNAME="contoso-kane-${{ github.run_number }}"
+          ./LT --user "${{ secrets.LT_USERNAME }}" --key "${{ secrets.LT_ACCESS_KEY }}" \
+               --tunnelName "$TNAME" &
+          sleep 12
+          echo "TUNNEL_NAME=$TNAME" >> "$GITHUB_ENV"
+          echo "tunnel_name=$TNAME" >> "$GITHUB_OUTPUT"
+          echo "LT tunnel ready: $TNAME"
+
+      - name: "Authenticate Kane CLI"
+        if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
+        run: |
+          kane-cli login \
+            --username "${{ secrets.LT_USERNAME }}" \
+            --access-key "${{ secrets.LT_ACCESS_KEY }}"
+
+      - name: "Run KaneAI - demo mode"
+        if: inputs.demo_mode == 'true'
+        env:
+          DEMO_MODE: "true"
+          TARGET_URL: "http://localhost:3000"
+        run: python ci/analyze_requirements.py --demo-mode
+
+      - name: "Run KaneAI - live"
+        if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
+        env:
+          LT_USERNAME:             ${{ secrets.LT_USERNAME }}
+          LT_ACCESS_KEY:           ${{ secrets.LT_ACCESS_KEY }}
+          TARGET_URL:              "http://localhost:3000"
+          KANE_TUNNEL:             "true"
+          KANE_TUNNEL_NAME:        ${{ env.TUNNEL_NAME }}
+          KANE_PARALLEL_WORKERS:   ${{ inputs.kane_workers || '5' }}
+          KANE_SUBPROCESS_TIMEOUT: "120"
+          GITHUB_RUN_NUMBER:       ${{ github.run_number }}
+        run: |
+          python ci/analyze_requirements.py \
+            --requirements requirements/search.txt \
+            --output requirements/analyzed_requirements.json
+
+      - name: "Emit Stage 1 summary"
+        id: emit
+        if: always()
+        run: |
+          python - <<'PYEOF'
+          import json, os
+          from pathlib import Path
+          p = Path('requirements/analyzed_requirements.json')
+          if not p.exists():
+              p.parent.mkdir(parents=True, exist_ok=True); p.write_text('[]')
+          data   = json.loads(p.read_text())
+          total  = len(data)
+          passed = sum(1 for r in data if r.get('kane_status') == 'passed')
+          failed = sum(1 for r in data if r.get('kane_status') == 'failed')
+          rate   = round(passed / total * 100, 1) if total else 0
+          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+              f.write(f"requirements_count={total}\nkane_passed={passed}\nkane_pass_rate={rate}\n")
+          icon = lambda s: ('PASS' if s == 'passed' else ('FAIL' if s == 'failed' else 'TIMEOUT' if s == 'timeout' else 'SKIP'))
+          lines = ["## Stage 1 - KaneAI Verification", "",
+              "| Metric | Value |", "|--------|-------|",
+              f"| Requirements | {total} |", f"| Passed | {passed} |",
+              f"| Failed | {failed} |", f"| Pass Rate | **{rate}%** |", "",
+              "| ID | Status | Title | Session |", "|----|--------|-------|---------|"]
+          for r in data:
+              links = r.get('kane_links') or []
+              link  = f"[View]({links[0]})" if links else '-'
+              lines.append(f"| {r['id']} | {icon(r['kane_status'])} | {r.get('title','')[:50]} | {link} |")
+          with open(os.environ.get('GITHUB_STEP_SUMMARY', '/dev/null'), 'a') as f:
+              f.write('\n'.join(lines) + '\n')
+          PYEOF
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: analyzed-requirements
+          path: requirements/analyzed_requirements.json
+          retention-days: 30
+
+  orchestrate:
+    name: "Stages 2-7 - STLC Orchestrator"
+    needs: [preflight, analyze]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      verdict:   ${{ steps.verdict.outputs.verdict }}
+      pass-rate: ${{ steps.verdict.outputs.pass_rate }}
+      he-job-id: ${{ steps.verdict.outputs.he_job_id }}
+      tests-run: ${{ steps.verdict.outputs.tests_selected }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: "Cache npm"
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-contoso-${{ runner.os }}-${{ env.NODE_VERSION }}
+
+      - name: "Cache pip"
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
+
+      - name: "Install Python deps"
+        run: pip install -r requirements.txt --cache-dir ~/.cache/pip -q
+
+      - name: "Install UI npm deps"
+        working-directory: ${{ env.UI_DIR }}
+        run: npm install
+
+      - name: "Start app on localhost:3000"
+        working-directory: ${{ env.UI_DIR }}
+        run: |
+          BROWSER=none npm start &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000 -o /dev/null && echo "App ready" && break
+            sleep 2
+          done
+          curl -sf http://localhost:3000 -o /dev/null || (echo "App not started" && exit 1)
+
+      - run: mkdir -p reports
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: analyzed-requirements
+          path: requirements
+
+      - name: "Validate Kane artifact"
+        run: |
+          python - <<'PYEOF'
+          import json, sys
+          from pathlib import Path
+          p = Path('requirements/analyzed_requirements.json')
+          if not p.exists():
+              print("ERROR: Kane artifact missing", file=sys.stderr); sys.exit(1)
+          data   = json.loads(p.read_text())
+          passed = sum(1 for r in data if r.get('kane_status') == 'passed')
+          print(f"Kane artifact: {len(data)} requirements, {passed} passed")
+          PYEOF
+
+      - name: "Download HyperExecute CLI"
+        run: |
+          curl -fsSL https://downloads.lambdatest.com/hyperexecute/linux/hyperexecute -o hyperexecute
+          chmod +x hyperexecute && ./hyperexecute --version
+
+      - name: "Run STLC Orchestrator (Stages 2-7)"
+        env:
+          LT_USERNAME:         ${{ secrets.LT_USERNAME }}
+          LT_ACCESS_KEY:       ${{ secrets.LT_ACCESS_KEY }}
+          TARGET_URL:          "http://localhost:3000"
+          FULL_RUN:            ${{ inputs.full_run || 'true' }}
+          BROWSERS:            ${{ inputs.browsers || 'chrome' }}
+          GITHUB_RUN_NUMBER:   ${{ github.run_number }}
+          AGENTIC_STLC_CONFIG: "agentic-stlc.config.yaml"
+          RUN_URL:             "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: python ci/agent.py
+
+      - name: "Read release verdict"
+        id: verdict
+        if: always()
+        run: |
+          python - <<'PYEOF'
+          import json, os
+          from pathlib import Path
+          verdict, pass_rate, he_job_id, tests_selected = 'UNKNOWN', 0, '', 0
+          rec = Path('reports/release_recommendation.json')
+          if rec.exists():
+              d = json.loads(rec.read_text())
+              verdict, pass_rate = d.get('verdict','UNKNOWN'), d.get('pass_rate', 0)
+          api = Path('reports/api_details.json')
+          if api.exists():
+              he_job_id = json.loads(api.read_text()).get('he_job_id', '')
+          manifest = Path('reports/test_execution_manifest.json')
+          if manifest.exists():
+              tests_selected = len(json.loads(manifest.read_text()).get('tests', []))
+          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+              f.write(f"verdict={verdict}\npass_rate={pass_rate}\nhe_job_id={he_job_id}\ntests_selected={tests_selected}\n")
+          PYEOF
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipeline-reports
+          path: |
+            reports/
+            scenarios/scenarios.json
+            tests/playwright/test_powerapps.py
+          retention-days: 30
+
+  rca:
+    name: "RCA - Failure Intelligence"
+    needs: [analyze, orchestrate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r requirements.txt -q
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: analyzed-requirements
+          path: requirements
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: pipeline-reports
+          path: .
+
+      - run: mkdir -p reports && python ci/rca_analysis.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rca-intelligence
+          path: |
+            reports/rca_result.json
+            reports/execution_summary.md
+            reports/failure_classification_report.json
+          retention-days: 30
+
+  summary:
+    name: "Pipeline Summary - Release Verdict"
+    needs: [preflight, analyze, orchestrate, rca]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    steps:
+      - name: "Final release verdict"
+        env:
+          VERDICT:     ${{ needs.orchestrate.outputs.verdict }}
+          PASS_RATE:   ${{ needs.orchestrate.outputs.pass-rate }}
+          KANE_PASSED: ${{ needs.analyze.outputs.kane-passed }}
+          REQ_COUNT:   ${{ needs.analyze.outputs.requirements-count }}
+          TESTS_RUN:   ${{ needs.orchestrate.outputs.tests-run }}
+          HE_JOB_ID:   ${{ needs.orchestrate.outputs.he-job-id }}
+        run: |
+          VERDICT="${VERDICT:-UNKNOWN}"
+          HE_LINK="${HE_JOB_ID:+https://hyperexecute.lambdatest.com/hyperexecute/task?jobId=$HE_JOB_ID}"
+          echo "## Agentic STLC - Contoso Traders - Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Verdict: ${VERDICT}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Verdict | **${VERDICT}** |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pass Rate | ${PASS_RATE}% |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Kane Passed | ${KANE_PASSED} / ${REQ_COUNT} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| HyperExecute Tests | ${TESTS_RUN} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| HE Job | ${HE_LINK:--} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Gate check"
+        env:
+          VERDICT: ${{ needs.orchestrate.outputs.verdict }}
+        run: |
+          [ "${VERDICT}" = "RED" ] && echo "::error::Verdict RED - quality gates failed" && exit 1
+          echo "Pipeline complete: ${VERDICT:-UNKNOWN}"

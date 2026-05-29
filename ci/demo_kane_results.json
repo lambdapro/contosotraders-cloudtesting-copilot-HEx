@@ -1,0 +1,154 @@
+[
+  {
+    "status": "passed",
+    "summary": "Navigated to IssueReporting Power App. M365 authentication completed. Main issues list loaded with 8 existing records. Column headers visible: Title, Status, Priority, Category, Submitted By, Date.",
+    "one_liner": "IssueReporting app loaded — issues list visible with 8 records and column headers",
+    "steps": [
+      "Navigated to Power Apps URL",
+      "Completed M365 authentication flow",
+      "Waited for canvas to render",
+      "Observed main issues list with records and column structure"
+    ],
+    "final_state": { "screen": "issues_list", "records_visible": 8 },
+    "duration": 44,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac001"
+  },
+  {
+    "status": "passed",
+    "summary": "Opened new issue creation form. Filled Title: 'KaneAI Test Issue'. Selected Category: 'Infrastructure'. Filled Description. Submitted form. New record appeared in issues list with status 'Pending'.",
+    "one_liner": "New issue report created — record appeared in list with status 'Pending'",
+    "steps": [
+      "Activated 'New Issue' action on issues list",
+      "Filled Title field: 'KaneAI Test Issue'",
+      "Selected Category from dropdown: 'Infrastructure'",
+      "Filled Description field",
+      "Submitted form",
+      "Verified new record in issues list"
+    ],
+    "final_state": { "screen": "issues_list", "new_record": "KaneAI Test Issue", "status": "Pending" },
+    "duration": 58,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac002"
+  },
+  {
+    "status": "passed",
+    "summary": "Clicked first issue row. Detail view loaded. Status: 'Active', Priority: 'High', Description: full text visible, Category: 'Safety', Submitted By: 'John Doe'.",
+    "one_liner": "Detail view showed Status: Active, Priority: High, Description: full text visible",
+    "steps": [
+      "Selected first issue from issues list",
+      "Detail view canvas loaded",
+      "Verified Status field: 'Active'",
+      "Verified Priority field: 'High'",
+      "Verified Description field: full text visible"
+    ],
+    "final_state": { "screen": "detail_view", "status": "Active", "priority": "High" },
+    "duration": 31,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac003"
+  },
+  {
+    "status": "passed",
+    "summary": "Filter control identified. Selected 'Active' status filter. List refreshed showing 4 of 8 records matching 'Active' status. All visible records confirmed as Active.",
+    "one_liner": "Filter applied — 4 of 8 items shown matching 'Active' status",
+    "steps": [
+      "Located status filter control",
+      "Selected 'Active' from filter options",
+      "List refreshed with filtered results",
+      "Verified all 4 visible records have 'Active' status"
+    ],
+    "final_state": { "screen": "issues_list", "filter": "Active", "visible_records": 4 },
+    "duration": 38,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac004"
+  },
+  {
+    "status": "passed",
+    "summary": "Navigated to issue detail view. Activated back navigation control. Issues list re-displayed with all 8 original records. Navigation completed without app reload.",
+    "one_liner": "Back navigation returned to main issues list — 8 records visible",
+    "steps": [
+      "Opened issue detail view",
+      "Located back navigation control",
+      "Activated back navigation",
+      "Verified issues list restored with records"
+    ],
+    "final_state": { "screen": "issues_list", "records_visible": 8 },
+    "duration": 29,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac005"
+  },
+  {
+    "status": "passed",
+    "summary": "Opened existing issue. Activated Edit action. Edit form pre-populated with current values. Changed Title to 'Edited by KaneAI'. Saved. Detail view refreshed showing updated title.",
+    "one_liner": "Edit saved — title updated to 'Edited by KaneAI'",
+    "steps": [
+      "Opened issue detail view",
+      "Activated Edit action",
+      "Edit form loaded with current values",
+      "Modified Title field",
+      "Saved changes",
+      "Verified updated title in detail view"
+    ],
+    "final_state": { "screen": "detail_view", "title": "Edited by KaneAI" },
+    "duration": 47,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac006"
+  },
+  {
+    "status": "passed",
+    "summary": "Entered 'infrastructure' in search field. List filtered to 2 matching records containing keyword in title. Non-matching records hidden. Search is case-insensitive confirmed.",
+    "one_liner": "Search returned 2 matching records containing 'infrastructure'",
+    "steps": [
+      "Located search input field",
+      "Entered keyword 'infrastructure'",
+      "List filtered to matching results",
+      "Verified 2 records shown with keyword in title"
+    ],
+    "final_state": { "screen": "issues_list", "search_term": "infrastructure", "results": 2 },
+    "duration": 33,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac007"
+  },
+  {
+    "status": "passed",
+    "summary": "Opened new issue creation form. Attempted submit with empty Title, Category, and Description fields. Form did not submit. Three validation messages appeared: one per mandatory field.",
+    "one_liner": "3 validation messages displayed for empty mandatory fields: Title, Category, Description",
+    "steps": [
+      "Opened new issue creation form",
+      "Attempted form submission without filling any fields",
+      "Observed form did not submit",
+      "Verified validation message for Title field",
+      "Verified validation message for Category field",
+      "Verified validation message for Description field"
+    ],
+    "final_state": { "screen": "create_form", "validation_errors": 3, "submitted": false },
+    "duration": 41,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac008"
+  },
+  {
+    "status": "passed",
+    "summary": "Clicked Priority column header. Row order changed — highest priority shown first. Navigated to page 2 using pagination control. Different 8 records displayed. Returned to page 1 to restore original order.",
+    "one_liner": "Sort changed row order by Priority; page 2 showed 8 different records; page 1 restored",
+    "steps": [
+      "Identified sortable column header: Priority",
+      "Clicked Priority header",
+      "Row order changed to descending priority",
+      "Located pagination control",
+      "Navigated to page 2",
+      "Verified different records on page 2",
+      "Returned to page 1"
+    ],
+    "final_state": { "screen": "issues_list", "sort_column": "Priority", "current_page": 1 },
+    "duration": 52,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac009"
+  },
+  {
+    "status": "passed",
+    "summary": "Approver-role authentication completed. App presented approver-specific view with pending approvals list. 2 issues in 'Pending Review' status visible. Approve and Reject actions confirmed available for each.",
+    "one_liner": "Approver view loaded — 2 pending approvals visible; Approve and Reject actions confirmed",
+    "steps": [
+      "Authenticated with approver-role M365 credentials",
+      "App detected approver role",
+      "Approver-specific view loaded",
+      "Identified 2 pending approval items",
+      "Verified Approve action available",
+      "Verified Reject action available"
+    ],
+    "final_state": { "screen": "approver_view", "pending_count": 2, "actions_available": ["approve", "reject"] },
+    "duration": 61,
+    "test_url": "https://automation.lambdatest.com/test?testID=demo-ac010"
+  }
+]
