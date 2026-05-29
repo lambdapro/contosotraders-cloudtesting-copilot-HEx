@@ -97,6 +97,7 @@ def _parse_kane_output(combined: str) -> dict:
     code_export_dir = ""
     share_link = ""
     testcase_link = ""
+    lt_session_link = ""   # real LambdaTest automation session URL (automation.lambdatest.com)
 
     for raw in combined.splitlines():
         stripped = raw.strip()
@@ -176,6 +177,14 @@ def _parse_kane_output(combined: str) -> dict:
             if m:
                 share_link = m.group(0).rstrip("│ \t")
 
+        # LambdaTest automation session viewer — Kane runs on LT CDP and prints
+        # the real session URL (https://automation.lambdatest.com/test?testID=...).
+        # This is a genuine, resolvable link — unlike a fabricated /session/<uuid>.
+        if "AUTOMATION.LAMBDATEST" in upper and not lt_session_link:
+            m = _HTTP_URL_RE.search(stripped)
+            if m:
+                lt_session_link = m.group(0).rstrip("│ \t")
+
         # Session UUID from any line that mentions sessions dir
         if not session_id and "sessions" in stripped.lower():
             m = _UUID_RE.search(stripped)
@@ -186,15 +195,32 @@ def _parse_kane_output(combined: str) -> dict:
     if not code_export_dir and session_id:
         code_export_dir = _find_code_export_by_session_id(session_id)
 
-    # Derive test_url from run_end or share_link
+    # Catch-all: scan the ENTIRE Kane CLI output for any URL on a known
+    # Kane / LambdaTest domain. These are real links the CLI emitted — we
+    # capture whichever the CLI produced rather than constructing one.
+    if not (share_link or testcase_link or lt_session_link):
+        for _u in _HTTP_URL_RE.findall(combined):
+            _u = _u.rstrip("│ \t,)")
+            _ul = _u.lower()
+            if "share.testmuai" in _ul and not share_link:
+                share_link = _u
+            elif "test-manager.testmuai" in _ul and not testcase_link:
+                testcase_link = _u
+            elif "automation.lambdatest.com" in _ul and not lt_session_link:
+                lt_session_link = _u
+
+    # Derive test_url ONLY from real, resolvable links — never fabricate.
+    # Priority: run_end test/session URL → LT automation session → Kane ShareLink → TestCase.
+    # If none exist, test_url stays "" and the UI shows "—" (no broken link).
     test_url = ""
     if run_end:
         test_url = run_end.get("test_url", "") or run_end.get("session_url", "")
+    if not test_url and lt_session_link:
+        test_url = lt_session_link
     if not test_url and share_link:
         test_url = share_link
-    if not test_url and session_id:
-        # Kane AI TMS is on testmuai.com, not lambdatest.com
-        test_url = f"https://test-manager.testmuai.com/session/{session_id}"
+    if not test_url and testcase_link:
+        test_url = testcase_link
 
     return {
         "run_end": run_end,
