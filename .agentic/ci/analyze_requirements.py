@@ -621,7 +621,6 @@ def run_kane_testmd(index: int, description: str, testmd_file: Path) -> dict:
         "--timeout", "120",
         "--max-steps", "30",
         "--on-lock-conflict", "wait",
-        "--retry",
     ]
     print(f"  [testmd] AC-{index:03d}: {testmd_file.name}")
     run_start = time.time()
