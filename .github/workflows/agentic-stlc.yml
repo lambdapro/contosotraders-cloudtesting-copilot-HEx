@@ -107,10 +107,14 @@ jobs:
           npm install -g @testmuai/kane-cli
 
       - name: Configure Kane CLI
-        if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true' && '' != ''
+        if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
         run: |
-          kane-cli config project 
-          kane-cli config folder  
+          kane-cli login --username ${{ secrets.LT_USERNAME }} --access-key ${{ secrets.LT_ACCESS_KEY }}
+          kane-cli config project 01J2VAWPNBPA21T0BW44JW026X
+          kane-cli config folder  01KPD0NC5ZXZD9EXB23QCATTG2
+        env:
+          LT_USERNAME:   ${{ secrets.LT_USERNAME }}
+          LT_ACCESS_KEY: ${{ secrets.LT_ACCESS_KEY }}
 
       - name: Run KaneAI (demo mode)
         if: inputs.demo_mode == 'true'
@@ -128,8 +132,8 @@ jobs:
           LT_ACCESS_KEY:         ${{ secrets.LT_ACCESS_KEY }}
           TARGET_URL:            ${{ inputs.target_url || 'http://localhost:3000' }}
           GITHUB_RUN_NUMBER:     ${{ github.run_number }}
-          KANE_PROJECT_ID:       ""
-          KANE_FOLDER_ID:        ""
+          KANE_PROJECT_ID:       "01J2VAWPNBPA21T0BW44JW026X"
+          KANE_FOLDER_ID:        "01KPD0NC5ZXZD9EXB23QCATTG2"
           AGENTIC_STLC_CONFIG:   agentic-stlc.config.yaml
 
       - name: Validate Stage 1 output

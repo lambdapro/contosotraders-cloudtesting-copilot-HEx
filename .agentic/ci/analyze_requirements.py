@@ -220,10 +220,28 @@ TARGET_URL = os.environ.get("TARGET_URL", "https://ecommerce-playground.lambdate
 
 
 def _configure_kane_project():
-    """Configure Kane CLI Test Manager project and folder once per process."""
+    """Authenticate Kane CLI and configure TMS project/folder (once per process).
+
+    kane-cli testmd run requires stored credentials from 'kane-cli login' in
+    addition to (or instead of) inline --username/--access-key flags.
+    """
     global _KANE_PROJECT_CONFIGURED
     if _KANE_PROJECT_CONFIGURED:
         return
+    username = os.environ.get("LT_USERNAME", "")
+    access_key = os.environ.get("LT_ACCESS_KEY", "")
+
+    # Authenticate — stores credentials for testmd runs that require login state
+    if username and access_key:
+        r = subprocess.run(
+            [KANE_EXE, "login", "--username", username, "--access-key", access_key],
+            capture_output=True, text=True, check=False,
+        )
+        if r.returncode == 0:
+            print(f"[Stage 1] Kane authenticated: {username}")
+        else:
+            print(f"[Stage 1] Kane login returned exit {r.returncode}: {(r.stdout+r.stderr).strip()[:200]}")
+
     project_id = os.environ.get("KANE_PROJECT_ID", "")
     folder_id = os.environ.get("KANE_FOLDER_ID", "")
     if project_id:
