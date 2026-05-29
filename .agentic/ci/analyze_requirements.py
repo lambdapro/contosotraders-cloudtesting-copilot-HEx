@@ -116,21 +116,35 @@ def parse_args():
 
 
 def extract_acceptance_criteria(text):
-    """Extracts acceptance criteria using deterministic line parsing."""
+    """Extracts acceptance criteria using deterministic line parsing.
+
+    Handles both dense format (consecutive lines) and spaced format (blank
+    lines between criteria). Strips optional 'AC-NNN:' / bullet prefixes.
+    """
     criteria = []
     lines = [line.strip() for line in text.splitlines()]
     capture = False
+    _AC_PREFIX = __import__("re").compile(r"^(AC-\d+|SC-\d+|\d+\.?)\s*[:.)]\s*", __import__("re").IGNORECASE)
+    _STOP = ("---", "as a ", "i want to ", "so that ", "user story", "given ", "when ", "then ")
+
     for line in lines:
         if line.lower().strip().rstrip(":").startswith("acceptance criteria"):
             capture = True
             continue
-        if capture:
-            if not line or line.startswith("---") or line.lower().startswith("title") or \
-               any(line.lower().startswith(p) for p in ["as a ", "i want to ", "so that ", "acceptance criteria"]):
-                capture = False
-                continue
-            criteria.append(line)
-    return [c for c in criteria if c.strip()]
+        if not capture:
+            continue
+        # Stop on section headings (but not on blank lines — skip those)
+        if not line:
+            continue
+        if line.startswith("---") or line.lower().startswith("title") or \
+           any(line.lower().startswith(p) for p in _STOP):
+            capture = False
+            continue
+        # Strip optional 'AC-001: ' or '1. ' prefix
+        clean = _AC_PREFIX.sub("", line).strip()
+        if clean:
+            criteria.append(clean)
+    return criteria
 
 
 def make_title(description):
