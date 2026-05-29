@@ -250,9 +250,24 @@ jobs:
 
       - name: "Install Python deps"
         run: pip install -r requirements.txt --cache-dir ~/.cache/pip -q
-        # No app start and no tunnel on this runner: agent.py submits the
-        # HyperExecute job, and each HE VM launches the Contoso app itself
-        # (hyperexecute.yaml pre:) then runs the test with a local browser.
+
+      - name: "Install UI npm deps"
+        working-directory: ${{ env.UI_DIR }}
+        run: npm install
+
+      - name: "Start Contoso app on runner localhost:3000"
+        working-directory: ${{ env.UI_DIR }}
+        run: |
+          BROWSER=none nohup npm start > /tmp/contoso-app.log 2>&1 &
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:3000 -o /dev/null && echo "App ready on runner after $((i*3))s" && break
+            sleep 3
+          done
+          curl -sf http://localhost:3000 -o /dev/null || (echo "App failed to start"; tail -40 /tmp/contoso-app.log; exit 1)
+        # The app runs HERE on the runner. agent.py runs the HyperExecute CLI which
+        # (tunnel: true in hyperexecute.yaml) provisions a NAT tunnel from this
+        # runner to the LT cloud, so each VM's cloud browser reaches this app via
+        # the tunnel (conftest sets tunnel:true). HE tears the tunnel down at the end.
 
       - run: mkdir -p reports
 
