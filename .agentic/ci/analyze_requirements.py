@@ -499,6 +499,126 @@ def emit_metrics(stage, duration_seconds, cache_hit=False, criteria_count=0):
         pass
 
 
+# ---------------------------------------------------------------------------
+# TestMD mode — run kane-cli testmd run per .md file (no --ws-endpoint)
+# Activated when kaneai.use_testmd: true in agentic-stlc.config.yaml AND
+# kane/testmd/*.md files exist.
+# ---------------------------------------------------------------------------
+
+def _discover_testmd_files(testmd_dir: str = "kane/testmd") -> list[Path]:
+    """Return sorted list of *_test.md files in testmd_dir."""
+    d = Path(testmd_dir)
+    if not d.exists():
+        return []
+    return sorted(d.glob("*_test.md"))
+
+
+def run_kane_testmd(index: int, description: str, testmd_file: Path) -> dict:
+    """Run a single kane-cli testmd run and return a Kane result dict."""
+    username = os.environ.get("LT_USERNAME", "")
+    access_key = os.environ.get("LT_ACCESS_KEY", "")
+    if not username or not access_key:
+        return {
+            "status": "skipped",
+            "summary": "Skipped Kane TestMD run: LT credentials not available.",
+            "one_liner": "", "steps": [], "final_state": {},
+            "duration": None, "test_url": "", "session_id": "", "code_export_dir": "",
+        }
+
+    command = [
+        KANE_EXE, "testmd", "run", str(testmd_file),
+        "--agent", "--headless",
+        "--timeout", "120",
+        "--max-steps", "30",
+        "--on-lock-conflict", "wait",
+    ]
+    print(f"  [testmd] AC-{index:03d}: {testmd_file.name}")
+    run_start = time.time()
+    completed = subprocess.run(command, capture_output=True, text=True, check=False,
+                               encoding="utf-8", errors="replace")
+    duration = round(time.time() - run_start, 1)
+
+    exit_status = EXIT_STATUS.get(completed.returncode, "error")
+    combined = completed.stdout + "\n" + completed.stderr
+
+    # Parse NDJSON output (same as regular run_kane)
+    run_end = None
+    step_summaries = []
+    session_id = ""
+    code_export_dir = ""
+
+    for line in combined.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except Exception:
+            if "CodeExport" in line:
+                for part in line.split():
+                    if part.startswith("file://") or ("sessions" in part and "code" in part.lower()):
+                        raw = _parse_file_url(part)
+                        resolved = _resolve_code_export_path(raw)
+                        if resolved:
+                            code_export_dir = resolved
+            continue
+
+        if event.get("type") == "run_end":
+            run_end = event
+        elif event.get("type") == "step_end":
+            step_summaries.append(event.get("summary", ""))
+        elif event.get("type") == "run_start":
+            session_id = event.get("session_id", "")
+
+        raw_export = event.get("code_export_path", "") or event.get("export_path", "")
+        if raw_export:
+            resolved = _resolve_code_export_path(_parse_file_url(raw_export))
+            if resolved:
+                code_export_dir = resolved
+
+    if run_end:
+        exit_status = "passed" if run_end.get("passed") else "failed"
+        session_id = session_id or run_end.get("session_id", "")
+        summary = run_end.get("summary", run_end.get("one_liner", ""))
+        one_liner = run_end.get("one_liner", summary)
+    else:
+        summary = f"TestMD run {exit_status} (exit={completed.returncode})"
+        one_liner = ""
+
+    test_url = ""
+    if session_id:
+        test_url = f"https://test-manager.lambdatest.com/session/{session_id}"
+
+    return {
+        "status": exit_status,
+        "summary": summary,
+        "one_liner": one_liner,
+        "steps": step_summaries,
+        "final_state": run_end or {},
+        "duration": duration,
+        "test_url": test_url,
+        "session_id": session_id,
+        "code_export_dir": code_export_dir,
+    }
+
+
+def _run_kane_testmd_indexed(args) -> dict:
+    index, description, testmd_file = args
+    return run_kane_testmd(index, description, testmd_file)
+
+
+def _load_pipeline_config() -> dict:
+    """Load agentic-stlc.config.yaml from current working directory."""
+    config_path = Path(os.environ.get("AGENTIC_STLC_CONFIG", "agentic-stlc.config.yaml"))
+    if not config_path.exists():
+        return {}
+    try:
+        import yaml
+        return yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
+
 def main():
     args = parse_args()
     demo_mode = args.demo_mode or os.environ.get("DEMO_MODE", "false").lower() == "true"
@@ -517,6 +637,16 @@ def main():
     today = datetime.now(timezone.utc).date().isoformat()
     stage_start = time.time()
 
+    # Detect TestMD mode: config flag + testmd files present
+    pipeline_config = _load_pipeline_config()
+    use_testmd = pipeline_config.get("kaneai", {}).get("use_testmd", False)
+    testmd_dir = pipeline_config.get("kaneai", {}).get("testmd_output_dir", "kane/testmd")
+    testmd_files = _discover_testmd_files(testmd_dir) if use_testmd else []
+    if use_testmd and testmd_files:
+        print(f"[Stage 1] TestMD mode: {len(testmd_files)} .md files found in {testmd_dir}/")
+    elif use_testmd:
+        print(f"[Stage 1] TestMD mode requested but no .md files found in {testmd_dir}/ — using direct run mode")
+
     if demo_mode:
         print(f"[DEMO_MODE] Loading pre-generated Kane results for {len(criteria)} criteria")
         results = load_demo_results(criteria)
@@ -527,6 +657,34 @@ def main():
             "one_liner": "", "steps": [], "final_state": {}, "duration": None, "test_url": "",
             "session_id": "", "code_export_dir": "",
         } for _ in criteria]
+        cache_hit = False
+    elif use_testmd and testmd_files:
+        # TestMD mode: pair each criterion with its .md file (by index or filename match)
+        _configure_kane_project()
+        testmd_args = []
+        for i, description in enumerate(criteria, start=1):
+            # Match by AC index (ac_001_* -> criterion 1), fall back to positional
+            ac_slug = f"ac_{i:03d}_"
+            matched = next((f for f in testmd_files if f.name.startswith(ac_slug)), None)
+            if matched is None and i <= len(testmd_files):
+                matched = testmd_files[i - 1]  # positional fallback
+            if matched:
+                testmd_args.append((i, description, matched))
+            else:
+                print(f"  [warn] No TestMD file for AC-{i:03d} — will be skipped")
+        workers = min(int(os.getenv("KANE_PARALLEL_WORKERS", 10)), len(testmd_args)) if testmd_args else 1
+        print(f"[Stage 1] Running Kane TestMD in parallel (workers={workers}, {len(testmd_args)} files)...")
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            paired_results = list(executor.map(_run_kane_testmd_indexed, testmd_args))
+        # Rebuild results in original criterion order (unmatched criteria = skipped)
+        result_map = {args[0]: r for args, r in zip(testmd_args, paired_results)}
+        results = []
+        for i in range(1, len(criteria) + 1):
+            results.append(result_map.get(i, {
+                "status": "skipped", "summary": "No TestMD file matched.",
+                "one_liner": "", "steps": [], "final_state": {}, "duration": None,
+                "test_url": "", "session_id": "", "code_export_dir": "",
+            }))
         cache_hit = False
     else:
         _configure_kane_project()

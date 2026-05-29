@@ -77,6 +77,26 @@ jobs:
           pip install -r requirements.txt --cache-dir ~/.cache/pip -q
           pip install "protobuf>=6.31.0" -q
 
+      - name: Setup Node.js for app
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/ContosoTraders.Ui.Website/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: src/ContosoTraders.Ui.Website
+        run: npm ci
+
+      - name: Start application (background)
+        working-directory: src/ContosoTraders.Ui.Website
+        run: |
+          npm start &
+          npx wait-on http://localhost:3000 --timeout 60000
+        env:
+          CI: false
+          BROWSER: none
+
       - name: Install Kane CLI
         if: steps.kane-cache.outputs.cache-hit != 'true' && inputs.demo_mode != 'true'
         run: |
