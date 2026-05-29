@@ -24,15 +24,18 @@ retryOnFailure: true
 maxRetries: 1
 concurrency: 10
 
+# HyperExecute creates a built-in tunnel from each VM to the LambdaTest cloud
+# grid and injects HYPEREXECUTE_TUNNEL_NAME. conftest.py then connects to the
+# cloud browser via CDP with that tunnel, so the cloud browser reaches the app
+# running on the VM's localhost:3000. (Same remote-grid + tunnel model as Kane.)
+tunnel: true
+
 env:
   LT_USERNAME:        ${LT_USERNAME}
   LT_ACCESS_KEY:      ${LT_ACCESS_KEY}
   GITHUB_RUN_NUMBER:  ${GITHUB_RUN_NUMBER}
   TARGET_URL:         "http://localhost:3000"
   BROWSERS:           "chrome"
-  # Tells conftest.py to launch a LOCAL browser on the HE VM instead of
-  # connecting to the LambdaTest cloud grid via CDP. No tunnel needed.
-  HE_LOCAL_BROWSER:   "true"
 
 cacheKey: '{{ checksum "requirements.txt" }}'
 cacheDirectories:

@@ -431,9 +431,11 @@ def run_kane(index, description):
 
     task = _get_kane_task(description)
 
-    # Native Kane CLI invocation: --url sets the landing page, --tunnel-name binds
-    # the LambdaTest tunnel so Kane's cloud browser reaches the localhost app.
-    # This is more reliable than embedding tunnel:true in CDP wsEndpoint capabilities.
+    # Native Kane CLI invocation: --url sets the landing page; when a tunnel is
+    # active we MUST also pass --grid remote so Kane runs on the LambdaTest cloud
+    # grid and binds the named tunnel — only then can the cloud browser reach the
+    # localhost app. Without --grid remote the tunnel binding never applies and
+    # the app fails to load.
     command = [
         KANE_EXE, "run", task,
         "--url", TARGET_URL,
@@ -449,7 +451,7 @@ def run_kane(index, description):
     ]
     tunnel_name = os.environ.get("KANE_TUNNEL_NAME", "")
     if os.environ.get("KANE_TUNNEL", "false").lower() == "true" and tunnel_name:
-        command += ["--tunnel-name", tunnel_name]
+        command += ["--grid", "remote", "--tunnel-name", tunnel_name]
     run_start = time.time()
     completed = subprocess.run(command, capture_output=True, text=True, check=False,
                                encoding="utf-8", errors="replace")
