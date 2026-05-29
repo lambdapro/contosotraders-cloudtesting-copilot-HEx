@@ -1,0 +1,65 @@
+version: 0.1
+globalTimeout: 180
+testSuiteTimeout: 180
+testSuiteStep: 180
+
+runson: linux
+
+autosplit: true
+retryOnFailure: true
+maxRetries: 1
+concurrency: 15
+
+# BROWSERS drives pytest parametrize in conftest.py — no HyperExecute matrix needed.
+# Each test function runs once per browser listed here.
+# Android connects to a LambdaTest real device via CDP; the HE VM stays Linux.
+env:
+  LT_USERNAME: ${LT_USERNAME}
+  LT_ACCESS_KEY: ${LT_ACCESS_KEY}
+  GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}
+  TARGET_URL: "http://localhost:3000"
+  BROWSERS: "chrome"
+
+cacheKey: '{{ checksum "requirements.txt" }}'
+cacheDirectories:
+  - .pip_cache
+  - ~/.cache/ms-playwright
+
+pre:
+  - mkdir -p reports
+  - pip install --cache-dir .pip_cache -r requirements.txt
+  - playwright install chromium firefox webkit
+
+runtime:
+  language: python
+  version: "3.11"
+
+testDiscovery:
+  type: raw
+  mode: dynamic
+  command: cat reports/pytest_selection.txt
+
+# Fixed report filenames — ${BROWSER} is NOT a HyperExecute-injected variable.
+# Browser-level results come from conftest.py writing reports/kane_result_SC-*_<browser>.json
+# per test per browser. normalize_artifacts.py reads those as Priority 1 source.
+testRunnerCommand: PYTHONPATH=. pytest "$test" -v --tb=short -s --html=reports/report.html --junitxml=reports/junit.xml
+
+mergeArtifacts: true
+uploadArtefacts:
+  - name: TestReports
+    path:
+      - reports/
+
+report: true
+partialReports:
+  type: json
+  location: reports/
+  frameworkName: extent
+
+post:
+  - echo "HyperExecute multi-browser tests complete"
+
+jobLabel:
+  - contosotraders-cloudtesting-copilot-hex
+  - agentic-stlc
+  - playwright
