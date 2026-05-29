@@ -618,9 +618,8 @@ def run_kane_testmd(index: int, description: str, testmd_file: Path) -> dict:
         "--username", username,
         "--access-key", access_key,
         "--agent", "--headless",
-        "--timeout", "120",
-        "--max-steps", "30",
-        "--on-lock-conflict", "wait",
+        "--timeout", "90",
+        "--max-steps", "25",
     ]
     print(f"  [testmd] AC-{index:03d}: {testmd_file.name}")
     run_start = time.time()
@@ -729,10 +728,13 @@ def main():
                 testmd_args.append((i, description, matched))
             else:
                 print(f"  [warn] No TestMD file for AC-{i:03d} — will be skipped")
-        workers = min(int(os.getenv("KANE_PARALLEL_WORKERS", 10)), len(testmd_args)) if testmd_args else 1
+        # Cap at 5 workers — TMS folder locks can serialize if too many run concurrently.
+        # Each TestMD has 90s timeout; 5 workers = ~90s wall time for 10 tests.
+        workers = min(int(os.getenv("KANE_PARALLEL_WORKERS", 5)), len(testmd_args)) if testmd_args else 1
         print(f"[Stage 1] Running Kane TestMD in parallel (workers={workers}, {len(testmd_args)} files)...")
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            paired_results = list(executor.map(_run_kane_testmd_indexed, testmd_args))
+            paired_results = list(executor.map(_run_kane_testmd_indexed, testmd_args,
+                                               timeout=120 * workers))
         # Rebuild results in original criterion order (unmatched criteria = skipped)
         result_map = {args[0]: r for args, r in zip(testmd_args, paired_results)}
         results = []
