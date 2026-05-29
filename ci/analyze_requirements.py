@@ -204,7 +204,7 @@ def _parse_kane_output(combined: str) -> dict:
             _ul = _u.lower()
             if "share.testmuai" in _ul and not share_link:
                 share_link = _u
-            elif "test-manager.testmuai" in _ul and not testcase_link:
+            elif ("test-manager.testmuai" in _ul or "test-manager.lambdatest" in _ul) and not testcase_link:
                 testcase_link = _u
             elif "automation.lambdatest.com" in _ul and not lt_session_link:
                 lt_session_link = _u
