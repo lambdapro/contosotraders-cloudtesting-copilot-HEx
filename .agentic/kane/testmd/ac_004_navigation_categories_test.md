@@ -5,8 +5,6 @@ max_steps: 20
 timeout: 60
 code_export: true
 code_language: python
-project: "01J2VAWPNBPA21T0BW44JW026X"
-folder: "01KPD0NC5ZXZD9EXB23QCATTG2"
 variables:
   app_url:
     value: "http://localhost:3000"
