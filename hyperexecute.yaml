@@ -64,7 +64,9 @@ testDiscovery:
   mode: dynamic
   command: cat reports/pytest_selection.txt
 
-testRunnerCommand: PYTHONPATH=. pytest "$test" -v --tb=short -s --html=reports/report.html --junitxml=reports/junit.xml
+# Runner ensures the app is up in the SAME stage as the test (HE may not keep a
+# pre-stage background process alive into the test stage), then runs the node.
+testRunnerCommand: bash ci/he_run_test.sh "$test"
 
 mergeArtifacts: true
 

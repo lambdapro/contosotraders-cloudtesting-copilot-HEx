@@ -343,132 +343,59 @@ def make_title(description):
 # Keys are canonical substrings from the acceptance criterion descriptions.
 # Values are task strings passed directly to `kane-cli run`.
 _KANE_TASK_OVERRIDES: dict[str, str] = {
-    # Contoso Traders: Memorial Day Sale banner check
-    "the application top banner should display a memorial day sale banner": (
-        "Go to http://localhost:3000/"
-        " — wait for the page to fully load"
-        " — look for a promotional banner or announcement bar at the very top of the page,"
-        " above the main navigation header."
-        " — check the text content of that banner element."
-        " — verify whether the banner says 'Memorial Day Sale' or contains 'Memorial Day'."
-        " — if the banner exists but shows different text (e.g. 'sei ffers' or any other text),"
-        " report exactly what the banner currently says."
-        " — if no banner is visible at all, report that the banner is absent."
-        " Stop once you have confirmed the banner text or absence."
+    # Contoso Traders objectives. The base URL is supplied via the kane-cli
+    # --url flag, so objectives are written relative to that landing page.
+    "memorial day sale banner": (
+        "Look at the very top of the page for a promotional banner or announcement bar"
+        " above the main navigation. Read its text content."
+        " Verify the banner text contains 'Memorial Day Sale' (or 'Memorial Day')."
+        " If the banner shows different text, report exactly what it says."
+        " If no banner is visible, report that it is absent."
+        " Stop once the banner text (or its absence) is confirmed."
     ),
-
-    # SC-001: product_id=28 (HTC Touch HD) is Out of Stock — use Cameras category (path=33)
-    # which has confirmed in-stock products with active Add to Cart buttons.
-    "add a product to the cart from the product detail page": (
-        "Go to https://ecommerce-playground.lambdatest.io/index.php?route=product/category&path=33"
-        " — click the first product thumbnail in the listing"
-        " — on the product page click the Add to Cart button (it must be an active blue button, not an Out Of Stock button;"
-        " if Out Of Stock go back and try the next product)"
-        " — verify the cart icon in the top navigation shows a count of 1 or more."
-        " Stop immediately once the cart count is updated. Do not navigate further."
+    "main navigation with product categories": (
+        "Wait for the homepage to load. Verify the top navigation shows product"
+        " category links such as Laptops, Controllers, Desktops, Mobiles and Monitors."
+        " Stop once at least three category links are visible."
     ),
-    # SC-002: same OOS fix — use Cameras category first product
-    "open the cart dropdown and see the list of added items": (
-        "Go to https://ecommerce-playground.lambdatest.io/index.php?route=product/category&path=33"
-        " — click the first product thumbnail — on the product page click the Add to Cart button"
-        " (active button, not Out Of Stock)"
-        " — then click the cart icon in the top-right header to expand the mini-cart dropdown"
-        " — verify at least one item name and price appears in the dropdown."
-        " Stop once the item name and price are visible in the cart dropdown."
+    "click laptops in the navigation": (
+        "Click the Laptops link in the top navigation. Wait for the product grid to load."
+        " Verify at least one laptop product card with a name and a price is visible."
+        " Stop once the product grid is confirmed."
     ),
-    # SC-003: generic task produced raw recording_state JSON — Kane never ran the objective.
-    # Direct URL to Laptops category forces correct landing and immediate verification.
-    "navigate to the laptops product catalog": (
-        "Navigate directly to https://ecommerce-playground.lambdatest.io/index.php?route=product/category&path=18"
-        " — wait for the page to fully load — verify a grid of product thumbnails is visible"
-        " (at least one product card with an image and price)."
-        " Stop immediately once the product grid is confirmed. Do not navigate anywhere else."
+    "click on any product in the laptops category": (
+        "Click the Laptops link in the navigation, then click the first product card."
+        " Wait for the product detail page to load. Verify the product name, a price,"
+        " and a product image are visible. Stop once the detail page is confirmed."
     ),
-
-    # SC-004: was unclassified (no override existed). Direct URL to Components category avoids
-    # the wrong-site navigation bug where Kane opened kaneai-playground instead.
-    "apply a manufacturer brand filter from the sidebar": (
-        "Go directly to https://ecommerce-playground.lambdatest.io/index.php?route=product/category&path=25"
-        " — wait for the page to fully load — in the left sidebar locate the MANUFACTURER filter section"
-        " — click the checkbox or link next to Apple"
-        " — wait for the product grid to refresh — verify the product listing has updated"
-        " (fewer results shown or the URL now includes a manufacturer parameter)."
-        " Stop once the filtered product list is confirmed. Do not navigate to any other site."
+    "use the search bar": (
+        "Find the search bar in the header. Type 'laptop' and submit the search."
+        " Wait for results. Verify at least one matching product result is shown."
+        " Stop once results are visible."
     ),
-    # SC-009: 'valid credentials' was too vague — Kane used non-existent emails and drifted to
-    # registration. Register a fixed test account first; subsequent runs log in with those creds.
-    "log in with a registered email address and password and land on the account dashboard": (
-        "Go to https://ecommerce-playground.lambdatest.io/index.php?route=account/login"
-        " — try logging in with Email=stlctest@example.com and Password=Test@12345"
-        " — if the credentials are invalid (error message appears), navigate to"
-        " https://ecommerce-playground.lambdatest.io/index.php?route=account/register"
-        " and register: First Name=STLC, Last Name=Test, Email=stlctest@example.com,"
-        " Telephone=5550001234, Password=Test@12345, Confirm Password=Test@12345"
-        " — accept Privacy Policy — click Continue — on the success page click Continue"
-        " — verify the account dashboard page loads (URL contains route=account/account)."
-        " Stop immediately once the dashboard heading is visible. Do not explore further."
+    "add a product to the cart": (
+        "Open the Laptops category, click the first product, then click the"
+        " Add to Cart button on the detail page. Verify the cart icon/count in the"
+        " header increments to 1 or more. Stop once the cart count updates."
     ),
-    # SC-010: same credential fix — register if needed, then log out
-    "log out from the account and be redirected to the home page": (
-        "Go to https://ecommerce-playground.lambdatest.io/index.php?route=account/login"
-        " — log in with Email=stlctest@example.com, Password=Test@12345"
-        " (if invalid, first register at /index.php?route=account/register with those credentials)"
-        " — once on the account dashboard click My Account in the top navigation bar"
-        " — click Logout from the dropdown menu"
-        " — verify the page redirects to the home page (root URL, not an account page)."
-        " Stop once the home page is confirmed."
-    ),
-    # SC-011: product_id=28 OOS — use Cameras category first in-stock product
-    "remove an item from the shopping cart and see the cart update with the item gone": (
-        "Go to https://ecommerce-playground.lambdatest.io/index.php?route=product/category&path=33"
-        " — click the first product thumbnail — click the Add to Cart button (active, not Out Of Stock)"
-        " — navigate directly to https://ecommerce-playground.lambdatest.io/index.php?route=checkout/cart"
-        " — click the Remove button (x icon) next to the item in the cart"
-        " — verify the cart page shows Your shopping cart is empty."
-        " Stop immediately after the empty cart message is confirmed."
-    ),
-    # SC-012: product_id=28 OOS — use Cameras category first in-stock product
-    "update the quantity of an item in the shopping cart and see the line total recalculate": (
-        "Go to https://ecommerce-playground.lambdatest.io/index.php?route=product/category&path=33"
-        " — click the first product thumbnail — click the Add to Cart button (active, not Out Of Stock)"
-        " — navigate directly to https://ecommerce-playground.lambdatest.io/index.php?route=checkout/cart"
-        " — change the quantity input field value to 2 — click the Update button"
-        " — verify the line total price now reflects 2 items (doubled unit price)."
-        " Stop once the recalculated total is visible."
-    ),
-    # SC-014: 'valid credentials' was vague and wishlist requires login. Use fixed test account.
-    "add a product to the wish list from the product detail page and view it in the wishlist": (
-        "Go to https://ecommerce-playground.lambdatest.io/index.php?route=account/login"
-        " — log in with Email=stlctest@example.com, Password=Test@12345"
-        " (if invalid, first register at /index.php?route=account/register with those credentials)"
-        " — once logged in navigate to"
-        " https://ecommerce-playground.lambdatest.io/index.php?route=product/product&product_id=40"
-        " — click the Add to Wish List heart icon button"
-        " — verify a success notification appears confirming the item was added to the wish list."
-        " Stop once the wish list success message is shown."
-    ),
-    # SC-015: product_id=28 OOS — use Cameras category first in-stock product for checkout
-    "complete a guest checkout by entering a shipping address and selecting flat rate shipping": (
-        "Go to https://ecommerce-playground.lambdatest.io/index.php?route=product/category&path=33"
-        " — click the first product thumbnail — click Add to Cart (active button, not Out Of Stock)"
-        " — navigate to https://ecommerce-playground.lambdatest.io/index.php?route=checkout/checkout"
-        " — select the Guest Checkout option"
-        " — fill in the billing address form: First Name=Test, Last Name=User, Email=guest@test.com,"
-        " Address 1=123 Main St, City=Austin, Post Code=78701, Country=United States, Region=Texas"
-        " — select Flat Rate shipping"
-        " — verify you can proceed past the shipping step (Continue button active or payment step visible)."
-        " Stop once the shipping selection is confirmed."
+    "open the cart page and see the list of added items": (
+        "Open the Laptops category, click the first product, click Add to Cart,"
+        " then navigate to the cart page. Verify the added item appears with its"
+        " name and price. Stop once the cart item list is confirmed."
     ),
 }
 
 
 def _get_kane_task(description: str) -> str:
-    """Return an optimized Kane task or the generic fallback."""
+    """Return an optimized Kane objective, or the description itself.
+
+    The base URL is provided to Kane via the --url flag, so objectives are
+    written relative to the landing page (no hardcoded host needed)."""
     dl = description.lower()
     for keyword, task in _KANE_TASK_OVERRIDES.items():
         if keyword in dl:
             return task
-    return f"On {TARGET_URL} — {description}"
+    return description
 
 
 EXIT_STATUS = {0: "passed", 1: "failed", 2: "error", 3: "timeout"}
@@ -502,35 +429,16 @@ def run_kane(index, description):
     except Exception:
         pass
 
-    session_name = f"AC-{index:03d} | {description[:80].strip()}"
-
-    caps = {
-        "browserName": "Chrome",
-        "browserVersion": "latest",
-        "LT:Options": {
-            "platform": "Windows 10",
-            "build": build_name(),
-            "name": session_name,
-            "user": username,
-            "accessKey": access_key,
-            "network": True,
-            "video": True,
-            "console": True,
-            "tunnel": False,
-            "tunnelName": "",
-            "playwrightClientVersion": playwright_version,
-        },
-    }
-    ws_endpoint = (
-        "wss://cdp.lambdatest.com/playwright?capabilities="
-        + urllib.parse.quote(json.dumps(caps))
-    )
     task = _get_kane_task(description)
+
+    # Native Kane CLI invocation: --url sets the landing page, --tunnel-name binds
+    # the LambdaTest tunnel so Kane's cloud browser reaches the localhost app.
+    # This is more reliable than embedding tunnel:true in CDP wsEndpoint capabilities.
     command = [
         KANE_EXE, "run", task,
+        "--url", TARGET_URL,
         "--username", username,
         "--access-key", access_key,
-        "--ws-endpoint", ws_endpoint,
         "--agent",
         "--headless",
         "--timeout", "120",
@@ -539,6 +447,9 @@ def run_kane(index, description):
         "--code-language", "python",
         "--skip-code-validation",
     ]
+    tunnel_name = os.environ.get("KANE_TUNNEL_NAME", "")
+    if os.environ.get("KANE_TUNNEL", "false").lower() == "true" and tunnel_name:
+        command += ["--tunnel-name", tunnel_name]
     run_start = time.time()
     completed = subprocess.run(command, capture_output=True, text=True, check=False,
                                encoding="utf-8", errors="replace")

@@ -7,6 +7,13 @@ set -uo pipefail
 APP_DIR="src/ContosoTraders.Ui.Website"
 LOG="/tmp/contoso-app.log"
 
+# Idempotent: if the app already answers, do nothing (safe to call from both
+# the pre: stage and the test stage on the same HyperExecute VM).
+if curl -sf http://localhost:3000 -o /dev/null 2>&1; then
+  echo "[he_launch_app] app already up on localhost:3000"
+  exit 0
+fi
+
 echo "[he_launch_app] ensuring Node.js is available..."
 if ! command -v node >/dev/null 2>&1; then
   echo "[he_launch_app] Node not found — installing Node 18 via nvm"
