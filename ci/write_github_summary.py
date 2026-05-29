@@ -208,8 +208,8 @@ def main():
     if not requirements:
         emit("_No requirements data found in analyzed_requirements.json._")
     else:
-        emit(f"| Req ID | Acceptance Criterion | Kane Status | What Kane Observed |")
-        emit("|---|---|---|---|")
+        emit(f"| Req ID | Acceptance Criterion | Kane Status | What Kane Observed | Kane Session |")
+        emit("|---|---|---|---|---|")
         for r in requirements:
             kane_status = r.get("kane_status", "unknown")
             icon = status_icon(kane_status)
@@ -217,7 +217,7 @@ def main():
             kane_links = r.get("kane_links", [])
             link = f"[session]({kane_links[0]})" if kane_links else "—"
             criterion = r.get("description", "")[:60]
-            emit(f"| `{r['id']}` | {criterion} | {icon} {kane_status} | {one_liner} |")
+            emit(f"| `{r['id']}` | {criterion} | {icon} {kane_status} | {one_liner} | {link} |")
         emit("")
 
         kane_failed = [r for r in requirements if r.get("kane_status") == "failed"]

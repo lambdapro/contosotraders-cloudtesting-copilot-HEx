@@ -27,7 +27,7 @@ LT_API_BASE       = "https://api.lambdatest.com/automation/api/v1"
 LT_USERNAME       = os.environ.get("LT_USERNAME", "")
 LT_ACCESS_KEY     = os.environ.get("LT_ACCESS_KEY", "")
 FULL_RUN          = os.environ.get("FULL_RUN", "true").lower() == "true"
-TARGET_URL = os.environ.get("TARGET_URL", "http://localhost:3000")
+TARGET_URL        = os.environ.get("TARGET_URL", "https://ecommerce-playground.lambdatest.io/")
 TODAY             = datetime.now(timezone.utc).date().isoformat()
 RUN_NUMBER        = os.environ.get("GITHUB_RUN_NUMBER", "")
 BUILD_NAME        = (
@@ -805,7 +805,14 @@ def _write_api_details(job_inner: dict, he_tasks: list, job_id: str) -> None:
         "selenium_reports_link": job_inner.get("seleniumReportsLink", ""),
         "runtime_logs_link":     job_inner.get("runtimeLogsLink", ""),
     }
-    api_details = {"he_summary": he_summary, "he_tasks": he_tasks, "kane_sessions": []}
+    # he_job_id at root for simple downstream .get('he_job_id') lookups
+    resolved_job_id = he_summary.get("job_id", "") or job_id
+    api_details = {
+        "he_job_id": resolved_job_id,
+        "he_summary": he_summary,
+        "he_tasks": he_tasks,
+        "kane_sessions": [],
+    }
     Path("reports").mkdir(exist_ok=True)
     Path("reports/api_details.json").write_text(
         json.dumps(api_details, indent=2), encoding="utf-8"
@@ -878,7 +885,7 @@ _CRITICAL_SCRIPTS = [
     "ci/build_traceability.py",
     "ci/release_recommendation.py",
     "ci/coverage_analysis.py",
-    "ci/write_github_summary.py",
+
 ]
 # Advisory scripts log warnings but never block the pipeline.
 # Order matters: fetch_rca must run before failure_intelligence (reads rca_report.json),

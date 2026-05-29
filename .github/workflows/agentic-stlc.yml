@@ -288,6 +288,17 @@ jobs:
           RUN_URL:             "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: python ci/agent.py
 
+      # ── Authoritative step summary: Kane session links + HE session links ─────
+      # write_github_summary.py reads: analyzed_requirements.json (Kane links),
+      # api_details.json (HE job link + per-test session links), normalized_results.json
+      # (Playwright pass/fail per browser), traceability_matrix.json.
+      # Runs with if: always() so it fires even when agent.py partially fails.
+      - name: "Write pipeline step summary (Kane + HyperExecute links)"
+        if: always()
+        env:
+          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: python ci/write_github_summary.py
+
       - name: "Read release verdict"
         id: verdict
         if: always()
@@ -302,7 +313,8 @@ jobs:
               verdict, pass_rate = d.get('verdict','UNKNOWN'), d.get('pass_rate', 0)
           api = Path('reports/api_details.json')
           if api.exists():
-              he_job_id = json.loads(api.read_text()).get('he_job_id', '')
+              d2 = json.loads(api.read_text())
+              he_job_id = d2.get('he_job_id','') or d2.get('he_summary',{}).get('job_id','')
           manifest = Path('reports/test_execution_manifest.json')
           if manifest.exists():
               tests_selected = len(json.loads(manifest.read_text()).get('tests', []))
