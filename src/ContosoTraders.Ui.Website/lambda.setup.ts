@@ -22,9 +22,15 @@ const capabilities = {
     video: true,
     console: true,
     accessibility:true,
+    // Tunnel: route the LambdaTest cloud browser to the app on the runner's
+    // localhost:3000. tunnel:true is required; tunnelName binds a specific tunnel
+    // (HE-provisioned in CI, or a locally-started LT tunnel). Empty name uses the
+    // account's active/global tunnel.
+    tunnel: true,
+    tunnelName: process.env.LT_TUNNEL_NAME || process.env.HYPEREXECUTE_TUNNEL_NAME || "",
     geoLocation: "", // country code can be fetched from https://www.lambdatest.com/capabilities-generator/
   },
-     
+
 };
 
 // Patching the capabilities dynamically according to the project name.
@@ -65,7 +71,15 @@ const test = base.test.extend({
         )}`,
       });
 
-      const ltPage = await browser.newPage(testInfo.project.use);
+      // Pass baseURL explicitly: pages created on a manually-connected browser
+      // do NOT inherit the playwright.config top-level `use.baseURL`, so relative
+      // gotos like page.goto('/') would otherwise fail.
+      const ltPage = await browser.newPage({
+        ...testInfo.project.use,
+        baseURL:
+          process.env.REACT_APP_BASEURLFORPLAYWRIGHTTESTING ||
+          "http://localhost:3000",
+      });
       await use(ltPage);
 
       const testStatus = {
