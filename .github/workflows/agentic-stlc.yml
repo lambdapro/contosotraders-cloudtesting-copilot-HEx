@@ -255,11 +255,6 @@ jobs:
         working-directory: ${{ env.UI_DIR }}
         run: npm install
 
-      - name: "Download HyperExecute tunnel binary"
-        run: |
-          curl -fsSL https://downloads.lambdatest.com/tunnel/v3/linux/64bit/LT_Linux.zip -o lt.zip
-          unzip -q lt.zip && chmod +x LT
-
       - run: mkdir -p reports
 
       - uses: actions/download-artifact@v4
@@ -303,7 +298,11 @@ jobs:
         run: |
           set -e
 
-          # 1) Start the Contoso app on the runner's localhost:3000
+          # Start the Contoso app on the runner's localhost:3000. The HE CLI
+          # (invoked by agent.py, with tunnel: true in hyperexecute.yaml) runs on
+          # THIS runner, provisions a NAT tunnel exposing this localhost, and binds
+          # it to the HE job so every VM's cloud browser can reach the app. The app
+          # is backgrounded in this same step so it stays up for the whole HE run.
           ( cd "$UI_DIR" && BROWSER=none nohup npm start > /tmp/contoso-app.log 2>&1 & )
           echo "Waiting for app on localhost:3000..."
           for i in $(seq 1 40); do
@@ -312,22 +311,7 @@ jobs:
           done
           curl -sf http://localhost:3000 -o /dev/null || (echo "App failed to start"; tail -40 /tmp/contoso-app.log; exit 1)
 
-          # 2) Start the named LambdaTest tunnel (stays alive for this whole step)
-          TNAME="contoso-he-${GITHUB_RUN_NUMBER}"
-          nohup ./LT --user "$LT_USERNAME" --key "$LT_ACCESS_KEY" \
-               --tunnelName "$TNAME" > /tmp/lt-tunnel.log 2>&1 &
-          echo "Waiting for tunnel $TNAME..."
-          for i in $(seq 1 25); do
-            grep -q "You can start testing now" /tmp/lt-tunnel.log && echo "Tunnel up: $TNAME" && break
-            sleep 3
-          done
-          grep -q "You can start testing now" /tmp/lt-tunnel.log || (echo "Tunnel failed"; cat /tmp/lt-tunnel.log; exit 1)
-
-          # 3) Export tunnel name so agent.py's HE CLI substitutes ${LT_TUNNEL_NAME}
-          #    in hyperexecute.yaml → injected into each VM → lambda.setup.ts caps.
-          export LT_TUNNEL_NAME="$TNAME"
-
-          # 4) Run the orchestrator (submits HE; tunnel + app stay up until it returns)
+          # Run the orchestrator (submits HE; HE provisions+binds its own tunnel).
           python ci/agent.py
 
       # ── Authoritative step summary: Kane session links + HE session links ─────

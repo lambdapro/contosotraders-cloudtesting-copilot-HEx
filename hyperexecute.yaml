@@ -13,12 +13,18 @@ version: 0.1
 
 runson: linux
 
-# Tunnel is started MANUALLY on the runner (orchestrate job) with a known name
-# and referenced by name in the Playwright caps (lambda.setup.ts) — the same
-# model proven working for Kane Stage 1. We do NOT use HE's auto tunnel:true,
-# which did not bind the native-Playwright cloud sessions (every test died at
-# "start the browser"). The named tunnel is account-global: any LT cloud session
-# with tunnelName=<name> routes to the runner's tunnel → the runner's app.
+# Tunnel is managed by HyperExecute itself (tunnel: true). The HE CLI runs on the
+# GitHub runner (where the Contoso app is also started), provisions a NAT tunnel,
+# and — crucially — ASSOCIATES it with the job so every VM's cloud browser session
+# can reach the runner's localhost:3000. MCP analysis proved a separately-started
+# runner tunnel is NOT associated with HE-VM cloud sessions (400 "tunnel is not
+# running or disconnected"; no LT sessions created). tunnelOpts.global keeps it
+# active across all stages. HE auto-injects HYPEREXECUTE_TUNNEL_NAME into each VM;
+# lambda.setup.ts reads it and sets tunnel:true + tunnelName in the caps.
+tunnel: true
+tunnelOpts:
+  global: true
+  checkTunnelOnFailure: true
 
 globalTimeout: 150
 testSuiteTimeout: 150
@@ -34,11 +40,9 @@ env:
   LT_ACCESS_KEY:     ${LT_ACCESS_KEY}
   GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}
   CI: "true"
-  # Name of the LT tunnel started on the runner (orchestrate job). Substituted
-  # from the orchestrate job's env at submit time and injected into each VM, so
-  # lambda.setup.ts sets caps tunnelName to this and the cloud browser routes to
-  # the runner's app via that tunnel.
-  LT_TUNNEL_NAME:    ${LT_TUNNEL_NAME}
+  # Belt-and-suspenders: ensure lambda.setup.ts sets caps tunnel:true even if the
+  # injected HYPEREXECUTE_TUNNEL_NAME is empty (global tunnels have no name).
+  HE_TUNNEL: "true"
 
 runtime:
   language: node
