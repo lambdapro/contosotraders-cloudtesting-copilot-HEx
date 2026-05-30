@@ -27,6 +27,7 @@ export default defineConfig({
   reporter: [
     ['list'],
     ['html', { open: 'never'}],
+    ['junit', { outputFile: 'test-results/junit.xml' }],
     ...(process.env.CI ? [['github'] as ['github']] : []),
   ],
 

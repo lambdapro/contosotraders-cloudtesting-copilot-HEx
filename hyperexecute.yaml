@@ -1,21 +1,22 @@
 version: 0.1
 
-# ── Contoso Traders — Agentic STLC HyperExecute Config ────────────────────────
+# ── Contoso Traders — Agentic STLC HyperExecute Config (NATIVE Playwright/TS) ──
 #
-# The Contoso app + HyperExecute global tunnel run on the GitHub Actions RUNNER
-# (the app launches reliably there — not inside an HE VM). With tunnel: true the
-# HE CLI (running on the runner) creates the tunnel; tunnelOpts.global keeps it
-# active across all execution stages so every cloud browser, across all parallel
-# tasks, reaches the runner's localhost:3000. conftest.py connects the cloud
-# browser via CDP with tunnel:true.
+# Runs the repo's native TypeScript Playwright suite at scale on LambdaTest.
+#   • The Contoso app + the HyperExecute global tunnel run on the GitHub Actions
+#     RUNNER (the orchestrate job starts the app before agent.py invokes the HE CLI).
+#   • tunnel: true → the HE CLI provisions a NAT tunnel from the runner; tunnelOpts
+#     keeps it global across stages so every cloud browser reaches the runner's
+#     localhost:3000. lambda.setup.ts sets tunnel:true + tunnelName in the caps.
+#   • Each spec file fans out to its own VM, which runs `npx playwright test`
+#     against the LambdaTest cloud browser (project chrome:108:Windows10@lambdatest).
 
 runson: linux
 
-# ── Tunnel configuration ──────────────────────────────────────────────────────
 tunnel: true
 tunnelOpts:
-  global: true                # keep the tunnel active across all execution stages
-  checkTunnelOnFailure: true  # auto-recover the tunnel if it drops
+  global: true
+  checkTunnelOnFailure: true
 
 globalTimeout: 150
 testSuiteTimeout: 150
@@ -24,61 +25,58 @@ testSuiteStep: 150
 autosplit: true
 retryOnFailure: true
 maxRetries: 1
-concurrency: 10
+concurrency: 5
 
 env:
-  LT_USERNAME:        ${LT_USERNAME}
-  LT_ACCESS_KEY:      ${LT_ACCESS_KEY}
-  GITHUB_RUN_NUMBER:  ${GITHUB_RUN_NUMBER}
-  TARGET_URL:         "http://localhost:3000"
-  BROWSERS:           "chrome"
-  # Tells conftest.py to set tunnel:true in the CDP capabilities (the global HE
-  # tunnel has no per-VM name to inject, so this flag enables it explicitly).
-  HE_TUNNEL:          "true"
-
-cacheKey: '{{ checksum "requirements.txt" }}'
-cacheDirectories:
-  - .pip_cache
-  - ~/.cache/ms-playwright
-
-# pre: installs Python deps only. No app launch in the VM (the app runs on the
-# runner) and no local browser install (tests use the LambdaTest cloud browser).
-pre:
-  - mkdir -p reports
-  - pip install --cache-dir .pip_cache -r requirements.txt -q
+  LT_USERNAME:       ${LT_USERNAME}
+  LT_ACCESS_KEY:     ${LT_ACCESS_KEY}
+  GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}
+  CI: "true"
+  # NOTE: HyperExecute auto-injects HYPEREXECUTE_TUNNEL_NAME into each VM when
+  # tunnel:true — lambda.setup.ts reads it. Do NOT set it here (an empty runner
+  # value would override HE's real tunnel name).
 
 runtime:
-  language: python
-  version: "3.11"
+  language: node
+  version: "18"
 
-# Stage 4 (write_test_selection in agent.py) writes one pytest node ID per line.
-# HyperExecute reads this file and fans each node out to a separate VM.
+cacheKey: '{{ checksum "src/ContosoTraders.Ui.Website/package-lock.json" }}'
+cacheDirectories:
+  - src/ContosoTraders.Ui.Website/node_modules
+
+pre:
+  - cd src/ContosoTraders.Ui.Website && npm install --no-audit --no-fund
+  - cd src/ContosoTraders.Ui.Website && npx playwright install chromium
+
+# Enumerate the native spec files (one HE task per spec). Paths are relative to
+# the UI dir so they pass cleanly to the runner command below.
 testDiscovery:
   type: raw
   mode: dynamic
-  command: cat reports/pytest_selection.txt
+  command: cd src/ContosoTraders.Ui.Website && ls tests/*.spec.ts
 
-# Plain pytest — conftest.py handles the LambdaTest cloud connection + tunnel.
-testRunnerCommand: PYTHONPATH=. pytest "$test" -v --tb=short -s --html=reports/report.html --junitxml=reports/junit.xml
+# Run each spec on the LambdaTest cloud browser via the tunnel. JUnit is written
+# under the UI dir's results folder and collected as an artifact.
+testRunnerCommand: cd src/ContosoTraders.Ui.Website && npx playwright test $test --project="chrome:108:Windows10@lambdatest"
 
 mergeArtifacts: true
-
 uploadArtefacts:
-  - name: ContosoPipelineReports
+  - name: PlaywrightReport
     path:
-      - reports/
+      - src/ContosoTraders.Ui.Website/playwright-report/**
+      - src/ContosoTraders.Ui.Website/test-results/**
 
 report: true
 partialReports:
-  type: json
-  location: reports/
-  frameworkName: extent
+  frameworkName: playwright
+  type: html
+  location: src/ContosoTraders.Ui.Website/playwright-report
 
 post:
-  - echo "HyperExecute Contoso Traders tests complete"
+  - echo "Native Playwright HyperExecute run complete"
 
 jobLabel:
   - contoso-traders
   - agentic-stlc
   - playwright
-  - python
+  - typescript
