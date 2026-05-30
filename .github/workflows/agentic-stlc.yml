@@ -255,32 +255,10 @@ jobs:
         working-directory: ${{ env.UI_DIR }}
         run: npm install
 
-      - name: "Start Contoso app on runner localhost:3000"
-        working-directory: ${{ env.UI_DIR }}
-        run: |
-          BROWSER=none nohup npm start > /tmp/contoso-app.log 2>&1 &
-          for i in $(seq 1 40); do
-            curl -sf http://localhost:3000 -o /dev/null && echo "App ready on runner after $((i*3))s" && break
-            sleep 3
-          done
-          curl -sf http://localhost:3000 -o /dev/null || (echo "App failed to start"; tail -40 /tmp/contoso-app.log; exit 1)
-
-      - name: "Start LambdaTest tunnel (named) on runner"
+      - name: "Download HyperExecute tunnel binary"
         run: |
           curl -fsSL https://downloads.lambdatest.com/tunnel/v3/linux/64bit/LT_Linux.zip -o lt.zip
           unzip -q lt.zip && chmod +x LT
-          TNAME="contoso-he-${{ github.run_number }}"
-          ./LT --user "${{ secrets.LT_USERNAME }}" --key "${{ secrets.LT_ACCESS_KEY }}" \
-               --tunnelName "$TNAME" > /tmp/lt-tunnel.log 2>&1 &
-          for i in $(seq 1 20); do
-            grep -q "You can start testing now" /tmp/lt-tunnel.log && echo "Tunnel up: $TNAME" && break
-            sleep 3
-          done
-          grep -q "You can start testing now" /tmp/lt-tunnel.log || (echo "Tunnel failed"; cat /tmp/lt-tunnel.log; exit 1)
-          # Export so agent.py's HE submit injects it into the VM env (hyperexecute.yaml
-          # env LT_TUNNEL_NAME: ${LT_TUNNEL_NAME}). lambda.setup.ts uses it as the caps
-          # tunnelName so each VM's cloud browser routes to this runner's app.
-          echo "LT_TUNNEL_NAME=$TNAME" >> "$GITHUB_ENV"
 
       - run: mkdir -p reports
 
@@ -307,7 +285,12 @@ jobs:
           curl -fsSL https://downloads.lambdatest.com/hyperexecute/linux/hyperexecute -o hyperexecute
           chmod +x hyperexecute && ./hyperexecute --version
 
-      - name: "Run STLC Orchestrator (Stages 2-7)"
+      # App + tunnel are started in THIS SAME step as agent.py so they stay alive
+      # for the entire HyperExecute run. GitHub Actions tears down a step's
+      # background processes when the step ends — starting them in a prior step
+      # left the tunnel dead by the time the HE VMs connected ("tunnel is not
+      # running or disconnected"). Keeping everything in one step fixes that.
+      - name: "Run STLC Orchestrator (Stages 2-7) + app + tunnel"
         env:
           LT_USERNAME:         ${{ secrets.LT_USERNAME }}
           LT_ACCESS_KEY:       ${{ secrets.LT_ACCESS_KEY }}
@@ -317,7 +300,35 @@ jobs:
           GITHUB_RUN_NUMBER:   ${{ github.run_number }}
           AGENTIC_STLC_CONFIG: "agentic-stlc.config.yaml"
           RUN_URL:             "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        run: python ci/agent.py
+        run: |
+          set -e
+
+          # 1) Start the Contoso app on the runner's localhost:3000
+          ( cd "$UI_DIR" && BROWSER=none nohup npm start > /tmp/contoso-app.log 2>&1 & )
+          echo "Waiting for app on localhost:3000..."
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:3000 -o /dev/null && echo "App ready after $((i*3))s" && break
+            sleep 3
+          done
+          curl -sf http://localhost:3000 -o /dev/null || (echo "App failed to start"; tail -40 /tmp/contoso-app.log; exit 1)
+
+          # 2) Start the named LambdaTest tunnel (stays alive for this whole step)
+          TNAME="contoso-he-${GITHUB_RUN_NUMBER}"
+          nohup ./LT --user "$LT_USERNAME" --key "$LT_ACCESS_KEY" \
+               --tunnelName "$TNAME" > /tmp/lt-tunnel.log 2>&1 &
+          echo "Waiting for tunnel $TNAME..."
+          for i in $(seq 1 25); do
+            grep -q "You can start testing now" /tmp/lt-tunnel.log && echo "Tunnel up: $TNAME" && break
+            sleep 3
+          done
+          grep -q "You can start testing now" /tmp/lt-tunnel.log || (echo "Tunnel failed"; cat /tmp/lt-tunnel.log; exit 1)
+
+          # 3) Export tunnel name so agent.py's HE CLI substitutes ${LT_TUNNEL_NAME}
+          #    in hyperexecute.yaml → injected into each VM → lambda.setup.ts caps.
+          export LT_TUNNEL_NAME="$TNAME"
+
+          # 4) Run the orchestrator (submits HE; tunnel + app stay up until it returns)
+          python ci/agent.py
 
       # ── Authoritative step summary: Kane session links + HE session links ─────
       # write_github_summary.py reads: analyzed_requirements.json (Kane links),
