@@ -264,10 +264,23 @@ jobs:
             sleep 3
           done
           curl -sf http://localhost:3000 -o /dev/null || (echo "App failed to start"; tail -40 /tmp/contoso-app.log; exit 1)
-        # The app runs HERE on the runner. agent.py runs the HyperExecute CLI which
-        # (tunnel: true in hyperexecute.yaml) provisions a NAT tunnel from this
-        # runner to the LT cloud, so each VM's cloud browser reaches this app via
-        # the tunnel (conftest sets tunnel:true). HE tears the tunnel down at the end.
+
+      - name: "Start LambdaTest tunnel (named) on runner"
+        run: |
+          curl -fsSL https://downloads.lambdatest.com/tunnel/v3/linux/64bit/LT_Linux.zip -o lt.zip
+          unzip -q lt.zip && chmod +x LT
+          TNAME="contoso-he-${{ github.run_number }}"
+          ./LT --user "${{ secrets.LT_USERNAME }}" --key "${{ secrets.LT_ACCESS_KEY }}" \
+               --tunnelName "$TNAME" > /tmp/lt-tunnel.log 2>&1 &
+          for i in $(seq 1 20); do
+            grep -q "You can start testing now" /tmp/lt-tunnel.log && echo "Tunnel up: $TNAME" && break
+            sleep 3
+          done
+          grep -q "You can start testing now" /tmp/lt-tunnel.log || (echo "Tunnel failed"; cat /tmp/lt-tunnel.log; exit 1)
+          # Export so agent.py's HE submit injects it into the VM env (hyperexecute.yaml
+          # env LT_TUNNEL_NAME: ${LT_TUNNEL_NAME}). lambda.setup.ts uses it as the caps
+          # tunnelName so each VM's cloud browser routes to this runner's app.
+          echo "LT_TUNNEL_NAME=$TNAME" >> "$GITHUB_ENV"
 
       - run: mkdir -p reports
 

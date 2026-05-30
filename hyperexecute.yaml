@@ -13,10 +13,12 @@ version: 0.1
 
 runson: linux
 
-tunnel: true
-tunnelOpts:
-  global: true
-  checkTunnelOnFailure: true
+# Tunnel is started MANUALLY on the runner (orchestrate job) with a known name
+# and referenced by name in the Playwright caps (lambda.setup.ts) — the same
+# model proven working for Kane Stage 1. We do NOT use HE's auto tunnel:true,
+# which did not bind the native-Playwright cloud sessions (every test died at
+# "start the browser"). The named tunnel is account-global: any LT cloud session
+# with tunnelName=<name> routes to the runner's tunnel → the runner's app.
 
 globalTimeout: 150
 testSuiteTimeout: 150
@@ -32,9 +34,11 @@ env:
   LT_ACCESS_KEY:     ${LT_ACCESS_KEY}
   GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}
   CI: "true"
-  # NOTE: HyperExecute auto-injects HYPEREXECUTE_TUNNEL_NAME into each VM when
-  # tunnel:true — lambda.setup.ts reads it. Do NOT set it here (an empty runner
-  # value would override HE's real tunnel name).
+  # Name of the LT tunnel started on the runner (orchestrate job). Substituted
+  # from the orchestrate job's env at submit time and injected into each VM, so
+  # lambda.setup.ts sets caps tunnelName to this and the cloud browser routes to
+  # the runner's app via that tunnel.
+  LT_TUNNEL_NAME:    ${LT_TUNNEL_NAME}
 
 runtime:
   language: node
