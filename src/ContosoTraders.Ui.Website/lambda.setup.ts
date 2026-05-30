@@ -8,6 +8,17 @@ import * as base from "@playwright/test";
 import path from "path";
 import { chromium } from "playwright";
 
+// Resolve the locally-installed Playwright version. LambdaTest's cloud grid
+// REQUIRES playwrightClientVersion in the caps and will close the session on
+// connect ("Browser has been closed") if it is missing/mismatched.
+let playwrightClientVersion = "1.33.0";
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  playwrightClientVersion = require("@playwright/test/package.json").version;
+} catch (e) {
+  /* fall back to the pinned version above */
+}
+
 // LambdaTest capabilities
 const capabilities = {
   browserName: "Chrome", // Browsers allowed: `Chrome`, `MicrosoftEdge`, `pw-chromium`, `pw-firefox` and `pw-webkit`
@@ -18,6 +29,7 @@ const capabilities = {
     name: "Github copilot Test Build",
     user: process.env.LT_USERNAME,
     accessKey: process.env.LT_ACCESS_KEY,
+    playwrightClientVersion: playwrightClientVersion,
     network: true,
     video: true,
     console: true,
