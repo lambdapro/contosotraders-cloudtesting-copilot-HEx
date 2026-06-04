@@ -1,90 +1,58 @@
-version: 0.1
+version: "0.1"
 
-# ── Contoso Traders — Agentic STLC HyperExecute Config (NATIVE Playwright/TS) ──
+# ── Contoso Traders — Agentic STLC HyperExecute (browser MATRIX) ──────────────
 #
-# Runs the repo's native TypeScript Playwright suite at scale on LambdaTest.
-# Each spec file fans out to its own VM, which runs `npx playwright test` against a
-# LambdaTest cloud browser (project chrome:108:Windows10@lambdatest).
+# Matrix execution: os × browser × test_files. Kane AI exports its regression
+# specs (Stage 3) into src/ContosoTraders.Ui.Website/regression/*.test.js, and the
+# glob below runs them across the browser matrix. The Contoso app is started on the
+# VM in `pre` (npm start) and exposed to the LambdaTest cloud browser via tunnel.
 #
-# Tunnel model (LOCAL-browser on VM): the orchestrate step starts the Contoso app
-# on the runner's localhost:3000. HyperExecute owns the tunnel via `tunnel: true`
-# (HE downloads/starts its own LT binary — so we must NOT pre-start one, or it
-# errors "tunnel binary already running"). Each VM runs Playwright's OWN chromium
-# (project "chromium-local", which does not match /lambdatest/ in lambda.setup.ts),
-# and the HE tunnel routes the VM's localhost:3000 to the runner's app. This is the
-# standard, working HE+tunnel pattern for a runner-local app; the cdp.lambdatest.com
-# cloud grid cannot bind an HE tunnel (proven: "browser has been closed").
-# The app is torn down right after this stage; HE closes its own tunnel.
+# NOTE: the UI lives under src/ContosoTraders.Ui.Website, so commands cd into it and
+# the test_files glob is relative to that directory (where node_modules + the
+# Playwright config live).
 
-runson: linux
-
-# HyperExecute provisions and owns the tunnel. global: true keeps it available to
-# every autosplit VM so each VM's local browser can reach the runner's localhost.
-tunnel: true
-tunnelOpts:
-  global: true
-
-globalTimeout: 150
-testSuiteTimeout: 150
-testSuiteStep: 150
-
-autosplit: true
 retryOnFailure: true
-maxRetries: 1
-concurrency: 5
+maxRetries: 3
+concurrency: 24
 
-env:
-  LT_USERNAME:       ${LT_USERNAME}
-  LT_ACCESS_KEY:     ${LT_ACCESS_KEY}
-  GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}
-  CI: "true"
-  # Base URL for the local Playwright browser on each VM. localhost:3000 is routed
-  # to the runner's app by the HE tunnel. Hardcoded (not ${...}) — an unset host var
-  # would otherwise be passed literally and break page.goto with "invalid URL".
-  # Change this to a public URL to run without a tunnel.
-  REACT_APP_BASEURLFORPLAYWRIGHTTESTING: "http://localhost:3000"
+matrix:
+  os: [win, linux]
+  # Playwright project names (defined in playwright.config.ts). Passed as
+  # --project=$browser; these are local Playwright browsers that run on the HE VM
+  # against the app started in `pre`.
+  browser:
+    - chromium
+    - firefox
+    - webkit
+  # Kane-exported regression specs (see ci/export_kane_regression.py). The glob is
+  # resolved at run time, so whatever Kane exports into regression/ is executed.
+  test_files:
+    - "regression/*.test.js"
 
-runtime:
-  language: node
-  version: "18"
+runson: ${matrix.os}
+
+tunnel: true
+
+mergeArtifacts: true
+report: true
+partialReports:
+  frameworkName: playwright
+  location: src/ContosoTraders.Ui.Website/playwright-report
+  type: html
+  email:
+    to:
+      - mudassars@lambdatest.com
 
 cacheKey: '{{ checksum "src/ContosoTraders.Ui.Website/package-lock.json" }}'
 cacheDirectories:
   - src/ContosoTraders.Ui.Website/node_modules
 
 pre:
-  - cd src/ContosoTraders.Ui.Website && npm install --no-audit --no-fund
-  - cd src/ContosoTraders.Ui.Website && npx playwright install chromium
+  - cd src/ContosoTraders.Ui.Website && npm install
+  - cd src/ContosoTraders.Ui.Website && npx playwright install
+  # Start the app on the VM's localhost:3000 (backgrounded) and wait until it
+  # responds, so the cloud browser reaches it through the tunnel during the tests.
+  - cd src/ContosoTraders.Ui.Website && (BROWSER=none npm start > app-start.log 2>&1 &) && npx --yes wait-on http://localhost:3000 -t 120000
 
-# Enumerate the native spec files (one HE task per spec). Paths are relative to
-# the UI dir so they pass cleanly to the runner command below.
-testDiscovery:
-  type: raw
-  mode: dynamic
-  command: cd src/ContosoTraders.Ui.Website && ls tests/*.spec.ts
-
-# Run each spec on the LambdaTest cloud browser via the tunnel. JUnit is written
-# under the UI dir's results folder and collected as an artifact.
-testRunnerCommand: cd src/ContosoTraders.Ui.Website && npx playwright test $test --project="chromium-local"
-
-mergeArtifacts: true
-uploadArtefacts:
-  - name: PlaywrightReport
-    path:
-      - src/ContosoTraders.Ui.Website/playwright-report/**
-      - src/ContosoTraders.Ui.Website/test-results/**
-
-report: true
-partialReports:
-  frameworkName: playwright
-  type: html
-  location: src/ContosoTraders.Ui.Website/playwright-report
-
-post:
-  - echo "Native Playwright HyperExecute run complete"
-
-jobLabel:
-  - contoso-traders
-  - agentic-stlc
-  - playwright
-  - typescript
+testSuites:
+  - cd src/ContosoTraders.Ui.Website && npx playwright test $test_files --project=$browser

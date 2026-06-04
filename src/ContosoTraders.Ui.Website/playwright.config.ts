@@ -56,6 +56,22 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
       },
     },
+    // Local Playwright browsers used by the HyperExecute matrix (--project=$browser
+    // where browser ∈ {chromium, firefox, webkit}). These names do NOT contain
+    // "lambdatest", so lambda.setup.ts runs the browser locally on the HE VM
+    // against the app started in `pre`.
+    {
+      name: "chromium",
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: "firefox",
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: "webkit",
+      use: { ...devices['Desktop Safari'] },
+    },
     // Setup project
  //   { name: 'setup', testMatch: /.*\.setup\.ts/ },
     // Test project that requires authentication

@@ -468,7 +468,7 @@ def run_kane(index, description):
         "--timeout", "120",
         "--max-steps", "30",
         "--code-export",
-        "--code-language", "python",
+        "--code-language", "javascript",
         "--skip-code-validation",
     ]
     run_start = time.time()
