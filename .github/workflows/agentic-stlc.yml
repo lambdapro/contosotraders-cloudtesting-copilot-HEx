@@ -298,11 +298,8 @@ jobs:
         run: |
           set -e
 
-          # Start the Contoso app on the runner's localhost:3000. The HE CLI
-          # (invoked by agent.py, with tunnel: true in hyperexecute.yaml) runs on
-          # THIS runner, provisions a NAT tunnel exposing this localhost, and binds
-          # it to the HE job so every VM's cloud browser can reach the app. The app
-          # is backgrounded in this same step so it stays up for the whole HE run.
+          # Start the Contoso app on the runner's localhost:3000. Backgrounded in
+          # this same step so it stays up for the whole HE run.
           ( cd "$UI_DIR" && BROWSER=none nohup npm start > /tmp/contoso-app.log 2>&1 & )
           echo "Waiting for app on localhost:3000..."
           for i in $(seq 1 40); do
@@ -311,7 +308,28 @@ jobs:
           done
           curl -sf http://localhost:3000 -o /dev/null || (echo "App failed to start"; tail -40 /tmp/contoso-app.log; exit 1)
 
-          # Run the orchestrator (submits HE; HE provisions+binds its own tunnel).
+          # Start a NAMED LambdaTest tunnel on THIS runner (the proven Kane model).
+          # The cloud Playwright browser session (cdp.lambdatest.com) binds to this
+          # named tunnel via caps tunnelName=LT_TUNNEL_NAME and reaches the runner's
+          # localhost:3000. We do NOT use HE-managed `tunnel: true`: isolation
+          # testing proved the cloud Playwright session cannot bind an unnamed
+          # global tunnel and the grid closes the session at chromium.connect().
+          # Started in THIS step so it stays alive for the whole HE run, and
+          # exported so agent.py's HE CLI inherits it and HE injects it into each VM.
+          curl -fsSL https://downloads.lambdatest.com/tunnel/v3/linux/64bit/LT_Linux.zip -o lt.zip
+          unzip -q -o lt.zip && chmod +x LT
+          export LT_TUNNEL_NAME="contoso-he-${GITHUB_RUN_NUMBER}"
+          ./LT --user "$LT_USERNAME" --key "$LT_ACCESS_KEY" --tunnelName "$LT_TUNNEL_NAME" > /tmp/lt-tunnel.log 2>&1 &
+          echo "Waiting for LT tunnel '$LT_TUNNEL_NAME'..."
+          for i in $(seq 1 20); do
+            grep -q "You can start testing now" /tmp/lt-tunnel.log 2>/dev/null && echo "Tunnel ready after $((i*3))s" && break
+            sleep 3
+          done
+          grep -q "You can start testing now" /tmp/lt-tunnel.log || (echo "Tunnel failed to start"; tail -30 /tmp/lt-tunnel.log; exit 1)
+
+          # Run the orchestrator. agent.py submits HE; each VM's npx playwright test
+          # connects to the cloud Playwright browser, which binds the named tunnel
+          # above (via caps tunnelName) to reach the runner's localhost:3000.
           python ci/agent.py
 
       # ── Authoritative step summary: Kane session links + HE session links ─────
