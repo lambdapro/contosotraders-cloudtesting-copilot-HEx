@@ -11,7 +11,7 @@ import { chromium } from "playwright";
 // Resolve the locally-installed Playwright version. LambdaTest's cloud grid
 // REQUIRES playwrightClientVersion in the caps and will close the session on
 // connect ("Browser has been closed") if it is missing/mismatched.
-let playwrightClientVersion = "1.33.0";
+let playwrightClientVersion = "1.47.2";
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   playwrightClientVersion = require("@playwright/test/package.json").version;
