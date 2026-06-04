@@ -403,6 +403,17 @@ jobs:
 
       - run: mkdir -p reports && python ci/rca_analysis.py
 
+      # AI-Powered RCA for Kane AI sessions (LambdaTest insights RCA API). Produces
+      # reports/kane_rca.md with steps_to_fix so Claude/Copilot can drive app fixes.
+      - name: "Kane AI RCA (steps_to_fix for Claude)"
+        if: always()
+        continue-on-error: true
+        env:
+          LT_USERNAME:   ${{ secrets.LT_USERNAME }}
+          LT_ACCESS_KEY: ${{ secrets.LT_ACCESS_KEY }}
+          KANE_RCA_SCOPE: "failed"
+        run: python ci/fetch_kane_rca.py
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -411,6 +422,8 @@ jobs:
             reports/rca_result.json
             reports/execution_summary.md
             reports/failure_classification_report.json
+            reports/kane_rca.json
+            reports/kane_rca.md
           retention-days: 30
 
   summary:

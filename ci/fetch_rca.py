@@ -88,9 +88,9 @@ def _extract_test_id(session_link: str) -> str:
 
 
 def _call_rca_api_httpx(session_id: str) -> dict:
-    """Fetch RCA using httpx."""
+    """Fetch RCA using httpx. Official API param is test_ids (comma-separated)."""
     import httpx
-    url = f"{RCA_API_BASE}?session_id={session_id}"
+    url = f"{RCA_API_BASE}?test_ids={session_id}"
     with httpx.Client(timeout=RCA_TIMEOUT) as client:
         resp = client.get(url, headers={"Authorization": _auth_header()})
         resp.raise_for_status()
@@ -100,7 +100,7 @@ def _call_rca_api_httpx(session_id: str) -> dict:
 def _call_rca_api_urllib(session_id: str) -> dict:
     """Fetch RCA using stdlib urllib (fallback when httpx absent)."""
     import urllib.request
-    url = f"{RCA_API_BASE}?session_id={session_id}"
+    url = f"{RCA_API_BASE}?test_ids={session_id}"
     req = urllib.request.Request(url, headers={"Authorization": _auth_header()})
     with urllib.request.urlopen(req, timeout=RCA_TIMEOUT) as resp:
         return json.loads(resp.read().decode())
@@ -126,6 +126,21 @@ def _extract_rca_summary(api_response: dict) -> str:
         return api_response.get("error", "skipped")
     if api_response.get("error"):
         return f"API error: {api_response['error']}"
+
+    # Official API shape: {data: [{rca_detail: {failure_summary, analysis[],
+    # steps_to_fix[...]}}]}
+    rows = api_response.get("data")
+    if isinstance(rows, list) and rows:
+        det = rows[0].get("rca_detail") or {}
+        if det.get("failure_summary"):
+            parts = [det["failure_summary"].strip()]
+            fixes = det.get("steps_to_fix") or []
+            if fixes:
+                tips = "; ".join(
+                    str(f.get("suggested_fix", f)) if isinstance(f, dict) else str(f)
+                    for f in fixes[:3])
+                parts.append(f"Suggested fix: {tips}")
+            return " — ".join(parts)
 
     # Common LambdaTest RCA response shapes
     for key in ("root_cause", "rootCause", "rca", "summary", "description",
