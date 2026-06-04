@@ -3,27 +3,37 @@ version: 0.1
 # ── Contoso Traders — Agentic STLC HyperExecute Config (NATIVE Playwright/TS) ──
 #
 # Runs the repo's native TypeScript Playwright suite at scale on LambdaTest.
-#   • The Contoso app + the HyperExecute global tunnel run on the GitHub Actions
-#     RUNNER (the orchestrate job starts the app before agent.py invokes the HE CLI).
-#   • tunnel: true → the HE CLI provisions a NAT tunnel from the runner; tunnelOpts
-#     keeps it global across stages so every cloud browser reaches the runner's
-#     localhost:3000. lambda.setup.ts sets tunnel:true + tunnelName in the caps.
-#   • Each spec file fans out to its own VM, which runs `npx playwright test`
-#     against the LambdaTest cloud browser (project chrome:108:Windows10@lambdatest).
+# Each spec file fans out to its own VM, which runs `npx playwright test` against a
+# LambdaTest cloud browser (project chrome:108:Windows10@lambdatest).
+#
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ KNOWN LIMITATION — HE CANNOT REACH A RUNNER-LOCAL APP (localhost:3000)        │
+# │                                                                              │
+# │ The cloud Playwright session (wss://cdp.lambdatest.com/playwright) is        │
+# │ initiated from the HE VM — a separate US-EAST-1 cloud machine, NOT the GHA   │
+# │ runner. It cannot bind a tunnel to reach the app on the runner's localhost:  │
+# │   • HE-managed global tunnel (tunnel:true) → grid closes session at          │
+# │     chromium.connect(): "browser has been closed".                           │
+# │   • Named runner tunnel (Kane model, LT_TUNNEL_NAME propagated to caps —     │
+# │     verified) → connect 400: "either tunnel is not running or disconnected". │
+# │   • tunnel:false against a PUBLIC url → connect() SUCCEEDS (isolation test).  │
+# │                                                                              │
+# │ Kane (Stage 1) works against localhost because it runs ON the runner next to │
+# │ its own named tunnel. HyperExecute does not have that locality.              │
+# │                                                                              │
+# │ TO RUN HE AT SCALE: deploy the app to a PUBLIC URL and set                   │
+# │   REACT_APP_BASEURLFORPLAYWRIGHTTESTING=<public-url>                          │
+# │ (lambda.setup.ts uses it as baseURL) with NO tunnel. For a localhost-only    │
+# │ app state (e.g. the Memorial Day banner), rely on Kane Stage 1 for the       │
+# │ functional verdict; HE regression requires a reachable public target.        │
+# └─────────────────────────────────────────────────────────────────────────────┘
 
 runson: linux
 
-# Tunnel model: a NAMED LambdaTest tunnel is started on the GitHub Actions runner
-# (in the orchestrate step, before agent.py) and its name is exported as
-# LT_TUNNEL_NAME. The cloud Playwright browser session (cdp.lambdatest.com) binds
-# to that named tunnel via caps tunnelName and reaches the runner's localhost:3000.
-#
-# We deliberately do NOT use HE-managed `tunnel: true` here. Isolation testing
-# proved chromium.connect() to the LT Playwright grid succeeds with tunnel:false,
-# but with the HE-managed *global* (unnamed) tunnel the cloud Playwright session
-# cannot bind it and the grid closes the session at connect() ("browser has been
-# closed"). The named-tunnel model is the one the Kane stage already uses
-# successfully on the same Linux runners.
+# Named runner tunnel is still started by the orchestrate step and propagated as
+# LT_TUNNEL_NAME (caps tunnelName), but per the limitation above it does NOT let
+# HE-VM cloud sessions reach localhost. Kept only so a future PUBLIC-URL run needs
+# no further wiring. We deliberately do NOT use HE-managed `tunnel: true`.
 
 globalTimeout: 150
 testSuiteTimeout: 150
@@ -66,7 +76,7 @@ testDiscovery:
 
 # Run each spec on the LambdaTest cloud browser via the tunnel. JUnit is written
 # under the UI dir's results folder and collected as an artifact.
-testRunnerCommand: cd src/ContosoTraders.Ui.Website && echo "DEBUG_TUNNEL=[$LT_TUNNEL_NAME]" && npx playwright test $test --project="chrome:108:Windows10@lambdatest"
+testRunnerCommand: cd src/ContosoTraders.Ui.Website && npx playwright test $test --project="chrome:108:Windows10@lambdatest"
 
 mergeArtifacts: true
 uploadArtefacts:
