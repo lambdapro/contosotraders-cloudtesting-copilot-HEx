@@ -16,7 +16,10 @@ maxRetries: 3
 concurrency: 24
 
 matrix:
-  os: [win, linux]
+  # linux only — the `pre` app-start (npm start backgrounded + wait-on) uses bash
+  # syntax that does not run on Windows VMs. Add a PowerShell variant before
+  # re-introducing win.
+  os: [linux]
   # LambdaTest cloud browser projects (defined in playwright.config.ts). Passed as
   # --project=$browser; lambda.setup.ts connects each to the cdp.lambdatest.com
   # cloud grid and reaches the pre-started app on the VM via tunnel: true.
