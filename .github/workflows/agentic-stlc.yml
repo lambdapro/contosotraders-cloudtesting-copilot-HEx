@@ -95,7 +95,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: requirements/analyzed_requirements.json
-          key: kane-contoso-${{ hashFiles('requirements/*.txt') }}-v6
+          # Per-run key → always a cache miss, so Kane runs LIVE every run and
+          # produces fresh code-exports for the regression export. (Re-enable
+          # caching later by switching back to a hashFiles-based key.)
+          key: kane-contoso-${{ github.run_id }}
 
       - name: "Install Python deps"
         run: pip install -r requirements.txt --cache-dir ~/.cache/pip -q

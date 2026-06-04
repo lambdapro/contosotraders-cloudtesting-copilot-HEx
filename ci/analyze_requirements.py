@@ -37,14 +37,22 @@ def _parse_file_url(raw: str) -> str:
     return no_scheme
 
 
+def _has_export_files(d: Path) -> bool:
+    """True if the directory contains exported test code (py/js/ts)."""
+    return d.is_dir() and any(
+        next(d.glob(pat), None) for pat in ("*.py", "*.js", "*.ts", "*.test.js", "*.spec.js")
+    )
+
+
 def _resolve_code_export_path(raw_path: str) -> str:
     """Given a path that may point to a file or a directory, return the
-    parent code-export directory only if it contains .py files."""
+    parent code-export directory only if it contains exported test code
+    (.py / .js / .ts — Kane's --code-language can be python or javascript)."""
     p = Path(raw_path)
     # If it's already a directory, use it directly
     candidates = [p, p.parent]
     for c in candidates:
-        if c.is_dir() and any(c.glob("*.py")):
+        if _has_export_files(c):
             return str(c)
     return ""
 
@@ -59,7 +67,7 @@ def _find_code_export_by_session_id(session_id: str) -> str:
     if not session_id:
         return ""
     candidate = KANE_SESSIONS_DIR / session_id / "code-export"
-    if candidate.is_dir() and any(candidate.glob("*.py")):
+    if _has_export_files(candidate):
         return str(candidate)
     return ""
 
