@@ -17,13 +17,13 @@ concurrency: 24
 
 matrix:
   os: [win, linux]
-  # Playwright project names (defined in playwright.config.ts). Passed as
-  # --project=$browser; these are local Playwright browsers that run on the HE VM
-  # against the app started in `pre`.
+  # LambdaTest cloud browser projects (defined in playwright.config.ts). Passed as
+  # --project=$browser; lambda.setup.ts connects each to the cdp.lambdatest.com
+  # cloud grid and reaches the pre-started app on the VM via tunnel: true.
   browser:
-    - chromium
-    - firefox
-    - webkit
+    - "MicrosoftEdge:latest:Windows10@lambdatest"
+    - "chrome:108:Windows10@lambdatest"
+    - "pw-firefox:latest@lambdatest"
   # Kane-exported regression specs (see ci/export_kane_regression.py). The glob is
   # resolved at run time, so whatever Kane exports into regression/ is executed.
   test_files:
