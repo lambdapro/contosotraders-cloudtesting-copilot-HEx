@@ -38,10 +38,11 @@ env:
   LT_ACCESS_KEY:     ${LT_ACCESS_KEY}
   GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}
   CI: "true"
-  # Base URL for the local Playwright browser on each VM. Defaults to localhost:3000,
-  # which the HE tunnel routes to the runner's app. Override to a public URL to run
-  # without a tunnel.
-  REACT_APP_BASEURLFORPLAYWRIGHTTESTING: ${REACT_APP_BASEURLFORPLAYWRIGHTTESTING}
+  # Base URL for the local Playwright browser on each VM. localhost:3000 is routed
+  # to the runner's app by the HE tunnel. Hardcoded (not ${...}) — an unset host var
+  # would otherwise be passed literally and break page.goto with "invalid URL".
+  # Change this to a public URL to run without a tunnel.
+  REACT_APP_BASEURLFORPLAYWRIGHTTESTING: "http://localhost:3000"
 
 runtime:
   language: node
