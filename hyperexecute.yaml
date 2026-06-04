@@ -6,34 +6,22 @@ version: 0.1
 # Each spec file fans out to its own VM, which runs `npx playwright test` against a
 # LambdaTest cloud browser (project chrome:108:Windows10@lambdatest).
 #
-# ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ KNOWN LIMITATION — HE CANNOT REACH A RUNNER-LOCAL APP (localhost:3000)        │
-# │                                                                              │
-# │ The cloud Playwright session (wss://cdp.lambdatest.com/playwright) is        │
-# │ initiated from the HE VM — a separate US-EAST-1 cloud machine, NOT the GHA   │
-# │ runner. It cannot bind a tunnel to reach the app on the runner's localhost:  │
-# │   • HE-managed global tunnel (tunnel:true) → grid closes session at          │
-# │     chromium.connect(): "browser has been closed".                           │
-# │   • Named runner tunnel (Kane model, LT_TUNNEL_NAME propagated to caps —     │
-# │     verified) → connect 400: "either tunnel is not running or disconnected". │
-# │   • tunnel:false against a PUBLIC url → connect() SUCCEEDS (isolation test).  │
-# │                                                                              │
-# │ Kane (Stage 1) works against localhost because it runs ON the runner next to │
-# │ its own named tunnel. HyperExecute does not have that locality.              │
-# │                                                                              │
-# │ TO RUN HE AT SCALE: deploy the app to a PUBLIC URL and set                   │
-# │   REACT_APP_BASEURLFORPLAYWRIGHTTESTING=<public-url>                          │
-# │ (lambda.setup.ts uses it as baseURL) with NO tunnel. For a localhost-only    │
-# │ app state (e.g. the Memorial Day banner), rely on Kane Stage 1 for the       │
-# │ functional verdict; HE regression requires a reachable public target.        │
-# └─────────────────────────────────────────────────────────────────────────────┘
+# Tunnel model: the orchestrate step starts the Contoso app on the runner's
+# localhost:3000 AND a NAMED LambdaTest tunnel (LT_TUNNEL_NAME, the same kind the
+# Kane stage uses successfully), then sets `tunnel: true` here so HyperExecute
+# associates that running tunnel with the job. lambda.setup.ts puts tunnel:true +
+# tunnelName=LT_TUNNEL_NAME in the caps, so each VM's cloud Playwright session
+# binds the runner tunnel and reaches localhost:3000. The app + tunnel are torn
+# down right after this HyperExecute stage completes.
 
 runson: linux
 
-# Named runner tunnel is still started by the orchestrate step and propagated as
-# LT_TUNNEL_NAME (caps tunnelName), but per the limitation above it does NOT let
-# HE-VM cloud sessions reach localhost. Kept only so a future PUBLIC-URL run needs
-# no further wiring. We deliberately do NOT use HE-managed `tunnel: true`.
+# Use the runner-started named tunnel for the whole job. `global: true` keeps it
+# associated across every stage/VM; the tunnel itself is the one started on the
+# runner alongside the app and referenced by LT_TUNNEL_NAME in the caps.
+tunnel: true
+tunnelOpts:
+  global: true
 
 globalTimeout: 150
 testSuiteTimeout: 150

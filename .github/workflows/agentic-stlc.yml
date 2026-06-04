@@ -308,18 +308,17 @@ jobs:
           done
           curl -sf http://localhost:3000 -o /dev/null || (echo "App failed to start"; tail -40 /tmp/contoso-app.log; exit 1)
 
-          # Start a NAMED LambdaTest tunnel on THIS runner (the proven Kane model).
-          # The cloud Playwright browser session (cdp.lambdatest.com) binds to this
-          # named tunnel via caps tunnelName=LT_TUNNEL_NAME and reaches the runner's
-          # localhost:3000. We do NOT use HE-managed `tunnel: true`: isolation
-          # testing proved the cloud Playwright session cannot bind an unnamed
-          # global tunnel and the grid closes the session at chromium.connect().
-          # Started in THIS step so it stays alive for the whole HE run, and
-          # exported so agent.py's HE CLI inherits it and HE injects it into each VM.
+          # Start a NAMED LambdaTest tunnel on THIS runner (the same kind the Kane
+          # stage uses). hyperexecute.yaml sets `tunnel: true`, so HyperExecute
+          # associates THIS running tunnel with the job; lambda.setup.ts puts
+          # tunnel:true + tunnelName=LT_TUNNEL_NAME in the caps, so each VM's cloud
+          # Playwright session binds it and reaches the runner's localhost:3000.
+          # Kept alive for the whole HE run, then torn down right after.
           curl -fsSL https://downloads.lambdatest.com/tunnel/v3/linux/64bit/LT_Linux.zip -o lt.zip
           unzip -q -o lt.zip && chmod +x LT
           export LT_TUNNEL_NAME="contoso-he-${GITHUB_RUN_NUMBER}"
           ./LT --user "$LT_USERNAME" --key "$LT_ACCESS_KEY" --tunnelName "$LT_TUNNEL_NAME" > /tmp/lt-tunnel.log 2>&1 &
+          TUNNEL_PID=$!
           echo "Waiting for LT tunnel '$LT_TUNNEL_NAME'..."
           for i in $(seq 1 20); do
             grep -q "You can start testing now" /tmp/lt-tunnel.log 2>/dev/null && echo "Tunnel ready after $((i*3))s" && break
@@ -327,10 +326,23 @@ jobs:
           done
           grep -q "You can start testing now" /tmp/lt-tunnel.log || (echo "Tunnel failed to start"; tail -30 /tmp/lt-tunnel.log; exit 1)
 
-          # Run the orchestrator. agent.py submits HE; each VM's npx playwright test
-          # connects to the cloud Playwright browser, which binds the named tunnel
-          # above (via caps tunnelName) to reach the runner's localhost:3000.
+          # Run the orchestrator (Stage 5 submits HE with tunnel:true). Capture the
+          # exit code so the tunnel + app are ALWAYS torn down afterwards.
+          set +e
           python ci/agent.py
+          HE_RC=$?
+          set -e
+
+          # ── Close the tunnel + application right after the HyperExecute stage ──
+          echo "::group::Teardown — stopping tunnel + app after HyperExecute stage"
+          kill "$TUNNEL_PID" 2>/dev/null || true
+          pkill -f "LT --user"     2>/dev/null || true
+          pkill -f "react-scripts" 2>/dev/null || true
+          pkill -f "npm start"     2>/dev/null || true
+          echo "Tunnel '$LT_TUNNEL_NAME' and app on :3000 stopped."
+          echo "::endgroup::"
+
+          exit $HE_RC
 
       # ── Authoritative step summary: Kane session links + HE session links ─────
       # write_github_summary.py reads: analyzed_requirements.json (Kane links),
