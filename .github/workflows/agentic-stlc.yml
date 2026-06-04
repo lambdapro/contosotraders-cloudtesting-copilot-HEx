@@ -308,38 +308,27 @@ jobs:
           done
           curl -sf http://localhost:3000 -o /dev/null || (echo "App failed to start"; tail -40 /tmp/contoso-app.log; exit 1)
 
-          # Start a NAMED LambdaTest tunnel on THIS runner (the same kind the Kane
-          # stage uses). hyperexecute.yaml sets `tunnel: true`, so HyperExecute
-          # associates THIS running tunnel with the job; lambda.setup.ts puts
-          # tunnel:true + tunnelName=LT_TUNNEL_NAME in the caps, so each VM's cloud
-          # Playwright session binds it and reaches the runner's localhost:3000.
-          # Kept alive for the whole HE run, then torn down right after.
-          curl -fsSL https://downloads.lambdatest.com/tunnel/v3/linux/64bit/LT_Linux.zip -o lt.zip
-          unzip -q -o lt.zip && chmod +x LT
-          export LT_TUNNEL_NAME="contoso-he-${GITHUB_RUN_NUMBER}"
-          ./LT --user "$LT_USERNAME" --key "$LT_ACCESS_KEY" --tunnelName "$LT_TUNNEL_NAME" > /tmp/lt-tunnel.log 2>&1 &
-          TUNNEL_PID=$!
-          echo "Waiting for LT tunnel '$LT_TUNNEL_NAME'..."
-          for i in $(seq 1 20); do
-            grep -q "You can start testing now" /tmp/lt-tunnel.log 2>/dev/null && echo "Tunnel ready after $((i*3))s" && break
-            sleep 3
-          done
-          grep -q "You can start testing now" /tmp/lt-tunnel.log || (echo "Tunnel failed to start"; tail -30 /tmp/lt-tunnel.log; exit 1)
+          # NOTE: we do NOT pre-start a LambdaTest tunnel here. hyperexecute.yaml
+          # sets `tunnel: true`, so the HE CLI (invoked by agent.py) downloads and
+          # starts its OWN LT tunnel binary on this runner and binds it to the job.
+          # Pre-starting one caused "tunnel binary already running / text file busy".
+          # Each HE VM runs Playwright's local chromium (project chromium-local) and
+          # reaches this runner's localhost:3000 through that HE-managed tunnel.
 
           # Run the orchestrator (Stage 5 submits HE with tunnel:true). Capture the
-          # exit code so the tunnel + app are ALWAYS torn down afterwards.
+          # exit code so the app is ALWAYS torn down afterwards.
           set +e
           python ci/agent.py
           HE_RC=$?
           set -e
 
-          # ── Close the tunnel + application right after the HyperExecute stage ──
-          echo "::group::Teardown — stopping tunnel + app after HyperExecute stage"
-          kill "$TUNNEL_PID" 2>/dev/null || true
-          pkill -f "LT --user"     2>/dev/null || true
+          # ── Close the application right after the HyperExecute stage (HE closes
+          #    its own tunnel; pkill LT defensively in case any instance lingers) ──
+          echo "::group::Teardown — stopping app + tunnel after HyperExecute stage"
           pkill -f "react-scripts" 2>/dev/null || true
           pkill -f "npm start"     2>/dev/null || true
-          echo "Tunnel '$LT_TUNNEL_NAME' and app on :3000 stopped."
+          pkill -f "LT --user"     2>/dev/null || true
+          echo "App on :3000 stopped (HE tunnel closed by HyperExecute)."
           echo "::endgroup::"
 
           exit $HE_RC

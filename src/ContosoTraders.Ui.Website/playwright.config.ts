@@ -44,10 +44,22 @@ export default defineConfig({
   },
 
   projects: [
+    // Local browser project (name does NOT contain "lambdatest"), so lambda.setup.ts
+    // uses Playwright's own chromium running ON the HyperExecute VM instead of
+    // connecting out to the cdp.lambdatest.com cloud grid. Combined with
+    // `tunnel: true` in hyperexecute.yaml, the VM reaches the runner's
+    // localhost:3000 through the HE tunnel. Used by the HyperExecute stage.
+    {
+      name: "chromium-local",
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 720 },
+      },
+    },
     // Setup project
  //   { name: 'setup', testMatch: /.*\.setup\.ts/ },
     // Test project that requires authentication
-   
+
    {
       name: "MicrosoftEdge:latest:Windows10@lambdatest",
       use: {
