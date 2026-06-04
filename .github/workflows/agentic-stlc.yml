@@ -95,7 +95,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: requirements/analyzed_requirements.json
-          key: kane-contoso-${{ hashFiles('requirements/*.txt') }}-v5
+          key: kane-contoso-${{ hashFiles('requirements/*.txt') }}-v6
 
       - name: "Install Python deps"
         run: pip install -r requirements.txt --cache-dir ~/.cache/pip -q
@@ -178,6 +178,12 @@ jobs:
             --requirements requirements/search.txt \
             --output requirements/analyzed_requirements.json
 
+      # Stage 3 — copy Kane AI's JS code-exports into the regression folder so the
+      # HyperExecute matrix (test_files: regression/*.test.js) can run them.
+      - name: "Stage 3 — Export Kane regression specs"
+        if: inputs.demo_mode != 'true'
+        run: python ci/export_kane_regression.py
+
       - name: "Emit Stage 1 summary"
         id: emit
         if: always()
@@ -215,6 +221,16 @@ jobs:
           name: analyzed-requirements
           path: requirements/analyzed_requirements.json
           retention-days: 30
+
+      # Pass the Kane-exported regression specs to the orchestrate job so
+      # HyperExecute (test_files: regression/*.test.js) can run them.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kane-regression
+          path: src/ContosoTraders.Ui.Website/regression/**
+          retention-days: 30
+          if-no-files-found: ignore
 
   orchestrate:
     name: "Stages 2-7 - STLC Orchestrator"
@@ -261,6 +277,14 @@ jobs:
         with:
           name: analyzed-requirements
           path: requirements
+
+      # Kane-exported regression specs (from the analyze job) — HyperExecute runs
+      # these via test_files: regression/*.test.js.
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: kane-regression
+          path: src/ContosoTraders.Ui.Website/regression
 
       - name: "Validate Kane artifact"
         run: |
