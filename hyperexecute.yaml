@@ -35,7 +35,9 @@ cacheDirectories:
 pre:
   # App on the VM's localhost:3000 — testmu launches a local browser that hits it.
   - cd src/ContosoTraders.Ui.Website && npm install
-  - cd src/ContosoTraders.Ui.Website && (BROWSER=none npm start > app-start.log 2>&1 &) && npx --yes wait-on http://localhost:3000 -t 120000
+  # Start the dev server, wait up to 240s; on timeout dump app-start.log so the
+  # failure is visible in the stage log instead of a bare wait-on timeout.
+  - cd src/ContosoTraders.Ui.Website && (BROWSER=none npm start > app-start.log 2>&1 &) && (npx --yes wait-on http://localhost:3000 -t 240000 || (echo "===== app-start.log ====="; cat app-start.log; exit 1))
   # testmu runtime + Playwright for the Kane exports.
   - pip3 install -r requirement.txt --cache-dir CacheDir
   - playwright install
