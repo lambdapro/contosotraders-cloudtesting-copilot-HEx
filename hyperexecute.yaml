@@ -1,40 +1,47 @@
 version: "0.1"
 
-# ── Contoso Traders — Agentic STLC HyperExecute (browser MATRIX) ──────────────
+# ── Contoso Traders — Agentic STLC HyperExecute (Kane testmu Python exports) ──
 #
-# Matrix execution: os × browser × test_files. Kane AI exports its regression
-# specs (Stage 3) into src/ContosoTraders.Ui.Website/regression/*.test.js, and the
-# glob below runs them across the browser matrix. The Contoso app is started on the
-# VM in `pre` (npm start) and exposed to the LambdaTest cloud browser via tunnel.
+# Runs the Python `testmu` scripts Kane AI exports (regression/*.py) at scale.
+# kane-cli only emits Python (--code-language javascript is a no-op), so each
+# export is `python <file>`: testmu.run launches a LOCAL Playwright browser on the
+# VM against the app started in `pre`, and calls Kane's AI vision API for the
+# assertions (consumes Kane AI credits per run).
 #
-# NOTE: the UI lives under src/ContosoTraders.Ui.Website, so commands cd into it and
-# the test_files glob is relative to that directory (where node_modules + the
-# Playwright config live).
+# matrix.files is AUTO-GENERATED before submit by ci/build_he_matrix.py from the
+# Kane-exported src/ContosoTraders.Ui.Website/regression/*.py.
+
+runson: linux
 
 retryOnFailure: true
 maxRetries: 3
 concurrency: 24
 
 matrix:
-  # linux only — the `pre` app-start (npm start backgrounded + wait-on) uses bash
-  # syntax that does not run on Windows VMs. Add a PowerShell variant before
-  # re-introducing win.
-  os: [linux]
-  # LambdaTest cloud browser projects (defined in playwright.config.ts). Passed as
-  # --project=$browser; lambda.setup.ts connects each to the cdp.lambdatest.com
-  # cloud grid and reaches the pre-started app on the VM via tunnel: true.
-  browser:
-    - "MicrosoftEdge:latest:Windows10@lambdatest"
-    - "chrome:108:Windows10@lambdatest"
-    - "pw-firefox:latest@lambdatest"
-  # Kane-exported regression specs (see ci/export_kane_regression.py). The glob is
-  # resolved at run time, so whatever Kane exports into regression/ is executed.
-  test_files:
-    - "regression/*.test.js"
+  files:
+    - src/ContosoTraders.Ui.Website/regression/_placeholder.py
 
-runson: ${matrix.os}
+env:
+  LT_USERNAME:        ${LT_USERNAME}
+  LT_ACCESS_KEY:      ${LT_ACCESS_KEY}
+  TESTMU_SMART:       "1"
+  TESTMU_HEADLESS:    "true"
+  TESTMU_AI_API_HOST: "https://kaneai-api.lambdatest.com/v16-server"
 
-tunnel: true
+cacheKey: '{{ checksum "requirement.txt" }}'
+cacheDirectories:
+  - CacheDir
+
+pre:
+  # App on the VM's localhost:3000 — testmu launches a local browser that hits it.
+  - cd src/ContosoTraders.Ui.Website && npm install
+  - cd src/ContosoTraders.Ui.Website && (BROWSER=none npm start > app-start.log 2>&1 &) && npx --yes wait-on http://localhost:3000 -t 120000
+  # testmu runtime + Playwright for the Kane exports.
+  - pip3 install -r requirement.txt --cache-dir CacheDir
+  - playwright install
+
+testSuites:
+  - python $files
 
 mergeArtifacts: true
 report: true
@@ -45,17 +52,3 @@ partialReports:
   email:
     to:
       - mudassars@lambdatest.com
-
-cacheKey: '{{ checksum "src/ContosoTraders.Ui.Website/package-lock.json" }}'
-cacheDirectories:
-  - src/ContosoTraders.Ui.Website/node_modules
-
-pre:
-  - cd src/ContosoTraders.Ui.Website && npm install
-  - cd src/ContosoTraders.Ui.Website && npx playwright install
-  # Start the app on the VM's localhost:3000 (backgrounded) and wait until it
-  # responds, so the cloud browser reaches it through the tunnel during the tests.
-  - cd src/ContosoTraders.Ui.Website && (BROWSER=none npm start > app-start.log 2>&1 &) && npx --yes wait-on http://localhost:3000 -t 120000
-
-testSuites:
-  - cd src/ContosoTraders.Ui.Website && npx playwright test $test_files --project=$browser

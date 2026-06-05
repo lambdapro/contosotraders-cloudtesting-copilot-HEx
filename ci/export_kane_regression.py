@@ -1,14 +1,18 @@
 """
 Stage 3 — Export Kane AI code-exports into the regression test folder.
 
-Kane AI runs with `--code-export --code-language javascript`, which writes the
-generated Playwright test for each session to its code-export directory
-(~/.testmuai/kaneai/sessions/<session_id>/code-export/). This script copies those
-JS files into src/ContosoTraders.Ui.Website/regression/<requirement>.test.js so the
-HyperExecute matrix (test_files: ["regression/*.test.js"]) can run them.
+Kane AI runs with `--code-export`, writing a Python `testmu` script (test.py) for
+each session to ~/.testmuai/kaneai/sessions/<session_id>/code-export/. (kane-cli
+only emits Python — `--code-language javascript` is a no-op as of 0.4.0.) Each
+script is run with `python <file>` via the testmu runtime: it launches a local
+Playwright browser and calls Kane's AI vision API for assertions.
 
-Source of truth: requirements/analyzed_requirements.json — each item carries
-kane_code_export_dir and/or kane_session_id.
+This copies each session's test.py into
+src/ContosoTraders.Ui.Website/regression/<requirement>.py so the HyperExecute
+matrix (`testSuites: python $files`) can run them.
+
+Source of truth: requirements/analyzed_requirements.json (kane_code_export_dir /
+kane_session_id per item).
 
 Run from the repo root:
     python ci/export_kane_regression.py
@@ -45,17 +49,18 @@ def _code_export_dir(item: dict) -> Path | None:
     return None
 
 
-def _pick_js(export_dir: Path) -> Path | None:
-    """Choose the exported JS spec from a Kane code-export directory."""
-    js = sorted(export_dir.rglob("*.js"))
-    if not js:
+def _pick_py(export_dir: Path) -> Path | None:
+    """Choose the exported testmu Python script from a Kane code-export dir."""
+    py = sorted(export_dir.rglob("*.py"))
+    if not py:
         return None
-    # Prefer a file that looks like a test/spec; else the largest .js
-    for p in js:
-        n = p.name.lower()
-        if "test" in n or "spec" in n:
+    for p in py:                       # prefer the canonical test.py
+        if p.name.lower() == "test.py":
             return p
-    return max(js, key=lambda p: p.stat().st_size)
+    for p in py:
+        if "test" in p.name.lower():
+            return p
+    return max(py, key=lambda p: p.stat().st_size)
 
 
 def main() -> int:
@@ -70,28 +75,30 @@ def main() -> int:
         data = data.get("requirements") or data.get("data") or []
 
     REGRESSION_DIR.mkdir(parents=True, exist_ok=True)
-    exported, missing = 0, []
+    exported, no_dir, no_py = 0, [], []
     for item in data:
         rid = item.get("id", "AC")
         export_dir = _code_export_dir(item)
         if not export_dir:
-            missing.append(rid)
+            no_dir.append(rid)
             continue
-        src = _pick_js(export_dir)
+        src = _pick_py(export_dir)
         if not src:
-            missing.append(rid)
+            no_py.append(f"{rid}({', '.join(x.name for x in export_dir.iterdir())})")
             continue
-        dest = REGRESSION_DIR / f"{rid}_{_slug(item.get('title',''), rid)}.test.js"
+        dest = REGRESSION_DIR / f"{rid}_{_slug(item.get('title',''), rid)}.py"
         shutil.copyfile(src, dest)
         print(f"[export_kane_regression] {rid}: {src} -> {dest}")
         exported += 1
 
-    print(f"[export_kane_regression] exported {exported} spec(s) to {REGRESSION_DIR}"
-          + (f"; no code-export for: {', '.join(missing)}" if missing else ""))
+    print(f"[export_kane_regression] exported {exported} testmu spec(s) to {REGRESSION_DIR}")
+    if no_dir:
+        print(f"[export_kane_regression]   no code-export dir (Kane failed/no export): {', '.join(no_dir)}")
+    if no_py:
+        print(f"[export_kane_regression]   dir present but no .py found: {', '.join(no_py)}")
     if exported == 0:
-        print("[export_kane_regression] NOTE: no Kane JS code-exports were found "
-              "(sessions dir not present on this runner, or Kane was skipped/cached). "
-              "regression/ left as-is.")
+        print("[export_kane_regression] NOTE: no testmu exports copied — Kane sessions dir "
+              "not present on this runner, or Kane was skipped/cached.")
     return 0
 
 

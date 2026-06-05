@@ -434,6 +434,15 @@ def run_hyperexecute() -> str:
     for line in lines:
         print(f"  {line}")
 
+    # Populate the HyperExecute matrix `files` from the Kane testmu exports
+    # (regression/*.py) just before submit — HE matrix values can't be dynamic
+    # inline. Best-effort.
+    try:
+        import build_he_matrix
+        build_he_matrix.main()
+    except Exception as exc:
+        print(f"[hyperexecute] build_he_matrix skipped ({exc})")
+
     cmd = [cli, "--user", LT_USERNAME, "--key", LT_ACCESS_KEY, "--config", "hyperexecute.yaml"]
     print(f"[hyperexecute] starting — cmd: {' '.join(cmd[:3])} ...")
     t0 = time.monotonic()
